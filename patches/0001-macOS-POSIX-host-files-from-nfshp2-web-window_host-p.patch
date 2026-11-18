@@ -1,7 +1,7 @@
 From ba07572cb60743886da55b3cd2df91243c3aa44b Mon Sep 17 00:00:00 2001
 From: Oleksandr Kostenko <sanyokkua@gmail.com>
 Date: Wed, 18 Nov 2026 19:51:38 +0100
-Subject: [PATCH] macOS: POSIX host files from nfshp2-web (window_host,
+Subject: [PATCH 1/2] macOS: POSIX host files from nfshp2-web (window_host,
  pad_host), 0.14 portability, MoltenVK surface/loader, host-owned main thread
 
 ---

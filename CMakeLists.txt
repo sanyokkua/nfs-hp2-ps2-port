@@ -89,10 +89,10 @@ hp2_shader(soft_native.frag native.frag -DSOFT)
 hp2_shader(ms_native_shadow.frag native_shadow.frag -DMSAA)
 add_custom_target(hp2_shaders DEPENDS ${SHADER_HEADERS})
 
-add_executable(hp2 ${RT_COMMON} ${RT}/native_vk.cpp ${MAC}/host_sdl.cpp ${MAC}/audio_sdl.cpp ${MAC}/web/setup_host.cpp
+add_executable(hp2 ${RT_COMMON} ${RT}/native_vk.cpp ${MAC}/host_sdl.cpp ${MAC}/audio_sdl.cpp ${MAC}/installer.cpp ${MAC}/web/setup_host.cpp
                $<TARGET_OBJECTS:hp2_gen>)
 add_dependencies(hp2 hp2_shaders)
 target_compile_options(hp2 PRIVATE ${HP2_FLAGS})
-target_compile_definitions(hp2 PRIVATE HP2_HOST_MAIN)
+target_compile_definitions(hp2 PRIVATE HP2_HOST_MAIN HP2_SOURCE_DATA="${UPSTREAM}/recomp/data")
 target_include_directories(hp2 PRIVATE ${HP2_INCLUDES} ${SHADER_OUT} ${VULKAN_INCLUDE})
 target_link_libraries(hp2 PRIVATE SDL3::SDL3)

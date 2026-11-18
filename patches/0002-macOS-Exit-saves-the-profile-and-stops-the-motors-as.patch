@@ -1,0 +1,26 @@
+From 80cbc47371ad01b9adf6e592a7a64944d4f90f9e Mon Sep 17 00:00:00 2001
+From: Oleksandr Kostenko <sanyokkua@gmail.com>
+Date: Wed, 18 Nov 2026 21:22:08 +0100
+Subject: [PATCH 2/2] macOS: Exit saves the profile and stops the motors (as
+ the Windows window's close)
+
+---
+ recomp/runtime/window_host.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/recomp/runtime/window_host.cpp b/recomp/runtime/window_host.cpp
+index 476a548..3b1c626 100644
+--- a/recomp/runtime/window_host.cpp
++++ b/recomp/runtime/window_host.cpp
+@@ -89,6 +89,8 @@ void pc_save_on_exit();
+ 
+ void window_quit()
+ {
++    window_rumble(0, 0);            // a pad's motors outlive the program
++    pc_save_on_exit();              // the profile's save, as the Windows window's WM_DESTROY does after WM_CLOSE
+     host_log_flush();
+     fflush(nullptr);
+     _exit(0);
+-- 
+2.56.1
+

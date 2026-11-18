@@ -32,16 +32,31 @@ Upstream is now 0.14 (`da838179`); our changes are `patches/0001-*.patch` (from 
 - **Checked:** `ctest` (float test + all 5 demos bit-exact on 0.14); windowed run on the M1 Pro: title screen and an attract race
   render correctly (car, track, sky, HUD, rear-view mirror) at the race's default 30 fps; frame dumps with `HP2_NATIVESHOT`.
 
+## P4 result (2026-11-18): the app
+- **Settings:** the game's own Options > PC Settings (upstream), saved to `hp2.ini` (user's choice: no separate ImGui menu).
+- **Exit:** the main menu's Exit row, Cmd+Q, or closing the window; each saves the profile first (`window_quit` now calls
+  `pc_save_on_exit`, as the Windows build does on close).
+- **Player's folder:** `~/Library/Application Support/SpeedBreaker HP2/` is the working directory: `hp2.ini`, `saves/`,
+  `logs/hp2.log` (+ `hp2_prev.log`) when started from Finder, `game/` (the installed disc files).
+- **First run (`mac/installer.cpp`):** asks for the disc image, extracts `NFSHP2/` and `SLUS_203.62` with `/usr/bin/bsdtar` into
+  `game.part`, checks the program's SHA-1, adds upstream's data files (app `Resources/data`), then renames to `game/`.
+  `HP2_INSTALL_ISO=<iso>` installs without questions; `HP2_DATA=<folder>` skips the install.
+- **App (`tools/make_app.sh`):** `build/app/SpeedBreaker HP2.app` (29 MB): `hp2` + bundled `libMoltenVK.dylib` and `libSDL3.0.dylib`
+  (verified loaded from the bundle), icon from upstream's `speed.ico`, ad-hoc signed. It contains the game's code compiled from the
+  disc: for this Mac only.
+- **Checked:** scripted fresh install from the real ISO in a throwaway HOME (game starts, Vulkan on the M1 Pro); bundled libraries.
+
 ## Build from scratch
 ```sh
 tools/fetch.sh                       # upstream/ at the pin + patches (GitHub, or mirror/ bundle)
 tools/install_disc.sh <your .iso>    # game-hp2/files
 tools/gen.sh                         # the game's code as C++
 cmake -S . -B build/mac -G Ninja -DHP2_DEMO_TESTS=ON && cmake --build build/mac && ctest --test-dir build/mac
-HP2_DATA=$PWD/game-hp2/files build/mac/hp2
+HP2_DATA=$PWD/game-hp2/files build/mac/hp2   # dev run
+tools/make_app.sh                            # build/app/SpeedBreaker HP2.app
 ```
 Needs Homebrew `sdl3 molten-vk vulkan-headers glslang`.
 
 ## Next
 - Not yet checked by a person: keyboard/gamepad feel, sound, fullscreen, saves, 60 fps setting, performance at higher scale.
-- P4: SpeedBreaker shell (installer from the ISO, settings menu, `.app` bundle with MoltenVK and SDL inside).
+- Play-test the app: first-run install dialog, Exit, fullscreen, 60 fps, saves across runs.

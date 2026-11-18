@@ -6,6 +6,7 @@
 // pointer, the motors). The game itself runs on a thread of its own: ps2.cpp's main, built as hp2_game_main (HP2_HOST_MAIN).
 #include "host_input.h"
 #include "host_mac.h"
+#include "installer.h"
 #include "pcconfig.h"
 
 #include <SDL3/SDL.h>
@@ -13,6 +14,8 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <string>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -211,6 +214,18 @@ int main(int, char **)
     }
     SDL_MetalView view = SDL_Metal_CreateView(g_window);
     g_layer.store(view ? SDL_Metal_GetLayer(view) : nullptr, std::memory_order_release);
+    // the game's files (installed from the player's disc on the first run), and the player's folder as the working directory:
+    // hp2.ini, saves/ and the log go there (the runtime opens them by relative paths outside Windows)
+    const std::string game_dir = install_ensure(g_window);
+    if (game_dir.empty()) return 0;
+    setenv("HP2_DATA", game_dir.c_str(), 1);
+    if (chdir(user_dir().c_str()) != 0) fprintf(stderr, "host: no folder %s\n", user_dir().c_str());
+    if (!isatty(2)) {                           // started from Finder: the log to a file, the last run's kept beside it
+        mkdir("logs", 0755);
+        rename("logs/hp2.log", "logs/hp2_prev.log");
+        if (freopen("logs/hp2.log", "w", stderr)) setvbuf(stderr, nullptr, _IOLBF, 0);
+    }
+    fprintf(stderr, "host: game %s, player's folder %s\n", game_dir.c_str(), user_dir().c_str());
     HostInput &in = host_input();
     view_changed(in);
     store(in.focused, 1);
