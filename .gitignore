@@ -1,0 +1,7 @@
+upstream/
+reference/
+game-hp2/
+work/
+build/
+mirror/
+.DS_Store
