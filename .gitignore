@@ -5,3 +5,7 @@ work/
 build/
 mirror/
 .DS_Store
+hp2.ini
+saves/
+logs/
+*.log
