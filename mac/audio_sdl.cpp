@@ -1,4 +1,4 @@
-// SpeedBreaker HP2. GPL-3.0-or-later.
+// NFS Hot Pursuit 2. GPL-3.0-or-later.
 // The game's sound on macOS: the SPU2's 48 kHz stereo frames pulled by SDL3's audio stream as the device needs them
 // (in place of upstream's audio_wasapi.cpp).
 #include "audio_out.h"

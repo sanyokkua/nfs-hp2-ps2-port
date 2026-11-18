@@ -1,4 +1,4 @@
-// SpeedBreaker HP2. GPL-3.0-or-later.
+// NFS Hot Pursuit 2. GPL-3.0-or-later.
 //
 // The macOS host: the process's main thread owns an SDL3 window (AppKit wants its windows and events there) with a Metal view for
 // MoltenVK, and plays the part nfshp2-web's page plays in the browser: it writes the runtime's input block (host_input.h: keys by

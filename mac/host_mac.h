@@ -1,4 +1,4 @@
-// SpeedBreaker HP2. GPL-3.0-or-later.
+// NFS Hot Pursuit 2. GPL-3.0-or-later.
 // What the macOS host (host_sdl.cpp) gives the runtime's renderer (native_vk.cpp): safe to call from any thread.
 #pragma once
 

@@ -1,4 +1,4 @@
-# SpeedBreaker HP2: NFS Hot Pursuit 2 (PS2, SLUS-20362) on macOS / Apple Silicon. GPL-3.0-or-later for this repository's own files.
+# NFS Hot Pursuit 2 for Mac: the PS2 game (SLUS-20362) on Apple Silicon. GPL-3.0-or-later.
 #
 # Builds ZloiKILLER's nfshp2-port-win runtime (upstream/, branch `mac`: pinned upstream + our changes) with the game's code as C++
 # (upstream/work/recomp/gen, made by tools/gen.sh from your disc) and this repository's macOS host (mac/).
@@ -7,6 +7,7 @@
 #   cmake --build build                    # hp2_headless (no picture; the determinism gate) and hp2 (the game)
 #   ctest --test-dir build                 # eefloat_soft_test; demo replays with -DHP2_DEMO_TESTS=ON (minutes)
 cmake_minimum_required(VERSION 3.24)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 15.0 CACHE STRING "the oldest macOS the game runs on")
 project(speedbreaker_hp2 C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -25,11 +26,12 @@ if(NOT GEN_SOURCES)
     message(FATAL_ERROR "${GEN} is empty: run tools/gen.sh first (it translates your disc's program to C++)")
 endif()
 
-# The runtime files every build has (as nfshp2-web's Makefile, plus 0.14's phase and cores)
-set(RT_COMMON ps2 mem_block pcmenu pcsettings pclang pcplatform native native_tex hle_iop dma vif profile hot_math native_mem memwatch
-              native_movie gs_regs pcconfig iop_cpu iop_kernel iop_libsd spu2 host disc window_host pad_host phase cores)
-list(TRANSFORM RT_COMMON PREPEND ${RT}/)
-list(TRANSFORM RT_COMMON APPEND .cpp)
+# The runtime files: one list with the players' build (mac/sources.txt, mac/build_game.sh). The headless build has no window,
+# renderer or sound of its own: it leaves out the macOS host and native_vk, and takes nfshp2-web's null backends.
+file(STRINGS mac/sources.txt HP2_SOURCES REGEX "^[^#]")
+list(TRANSFORM HP2_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
+set(RT_COMMON ${HP2_SOURCES})
+list(FILTER RT_COMMON EXCLUDE REGEX "/mac/|native_vk")
 
 # EE floats: the runtime models the EE's rounding itself; the host must not fuse a*b+c (arm64 clang does by default)
 set(HP2_FLAGS -w -fno-strict-aliasing -ffp-contract=off -include ${MAC}/web/compat_posix.h)
@@ -61,8 +63,11 @@ if(HP2_DEMO_TESTS)
 endif()
 
 # ---- hp2: the game (SDL3 window and sound, Vulkan on MoltenVK) ----
-find_package(SDL3 REQUIRED CONFIG)
-find_path(VULKAN_INCLUDE vulkan/vulkan.h HINTS /opt/homebrew/include REQUIRED)
+# SDL3 and the headers as the players get them: tools/build_deps.sh (macOS 15+)
+set(HP2_DEPS ${CMAKE_CURRENT_SOURCE_DIR}/build/deps CACHE PATH "tools/build_deps.sh's output")
+if(NOT EXISTS ${HP2_DEPS}/lib/libSDL3.0.dylib)
+    message(FATAL_ERROR "run tools/build_deps.sh first (${HP2_DEPS})")
+endif()
 find_program(GLSLANG glslangValidator REQUIRED)
 set(SHADER_DIR ${RT}/shaders)
 set(SHADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/shaders)
@@ -89,10 +94,11 @@ hp2_shader(soft_native.frag native.frag -DSOFT)
 hp2_shader(ms_native_shadow.frag native_shadow.frag -DMSAA)
 add_custom_target(hp2_shaders DEPENDS ${SHADER_HEADERS})
 
-add_executable(hp2 ${RT_COMMON} ${RT}/native_vk.cpp ${MAC}/host_sdl.cpp ${MAC}/audio_sdl.cpp ${MAC}/installer.cpp ${MAC}/web/setup_host.cpp
-               $<TARGET_OBJECTS:hp2_gen>)
+add_executable(hp2 ${HP2_SOURCES} $<TARGET_OBJECTS:hp2_gen>)
 add_dependencies(hp2 hp2_shaders)
 target_compile_options(hp2 PRIVATE ${HP2_FLAGS})
 target_compile_definitions(hp2 PRIVATE HP2_HOST_MAIN HP2_SOURCE_DATA="${UPSTREAM}/recomp/data")
-target_include_directories(hp2 PRIVATE ${HP2_INCLUDES} ${SHADER_OUT} ${VULKAN_INCLUDE})
-target_link_libraries(hp2 PRIVATE SDL3::SDL3)
+target_include_directories(hp2 PRIVATE ${HP2_INCLUDES} ${SHADER_OUT} ${HP2_DEPS}/include)
+target_link_libraries(hp2 PRIVATE ${HP2_DEPS}/lib/libSDL3.0.dylib)
+set_target_properties(hp2 PROPERTIES BUILD_RPATH "${HP2_DEPS}/lib" INSTALL_RPATH "@executable_path/../Frameworks")
+target_link_options(hp2 PRIVATE -Wl,-rpath,@executable_path/../Frameworks)

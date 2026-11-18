@@ -1,4 +1,4 @@
-# SpeedBreaker HP2: porting log
+# NFS Hot Pursuit 2: porting log
 
 ## Sources (pinned)
 | What | Where | Pin |
@@ -36,12 +36,12 @@ Upstream is now 0.14 (`da838179`); our changes are `patches/0001-*.patch` (from 
 - **Settings:** the game's own Options > PC Settings (upstream), saved to `hp2.ini` (user's choice: no separate ImGui menu).
 - **Exit:** the main menu's Exit row, Cmd+Q, or closing the window; each saves the profile first (`window_quit` now calls
   `pc_save_on_exit`, as the Windows build does on close).
-- **Player's folder:** `~/Library/Application Support/SpeedBreaker HP2/` is the working directory: `hp2.ini`, `saves/`,
+- **Player's folder:** `~/Library/Application Support/NFS Hot Pursuit 2/` is the working directory: `hp2.ini`, `saves/`,
   `logs/hp2.log` (+ `hp2_prev.log`) when started from Finder, `game/` (the installed disc files).
 - **First run (`mac/installer.cpp`):** asks for the disc image, extracts `NFSHP2/` and `SLUS_203.62` with `/usr/bin/bsdtar` into
   `game.part`, checks the program's SHA-1, adds upstream's data files (app `Resources/data`), then renames to `game/`.
   `HP2_INSTALL_ISO=<iso>` installs without questions; `HP2_DATA=<folder>` skips the install.
-- **App (`tools/make_app.sh`):** `build/app/SpeedBreaker HP2.app` (29 MB): `hp2` + bundled `libMoltenVK.dylib` and `libSDL3.0.dylib`
+- **App (`tools/make_app.sh`):** `build/app/NFS Hot Pursuit 2.app` (29 MB): `hp2` + bundled `libMoltenVK.dylib` and `libSDL3.0.dylib`
   (verified loaded from the bundle), icon from upstream's `speed.ico`, ad-hoc signed. It contains the game's code compiled from the
   disc: for this Mac only.
 - **Checked:** scripted fresh install from the real ISO in a throwaway HOME (game starts, Vulkan on the M1 Pro); bundled libraries.
@@ -53,10 +53,23 @@ tools/install_disc.sh <your .iso>    # game-hp2/files
 tools/gen.sh                         # the game's code as C++
 cmake -S . -B build/mac -G Ninja -DHP2_DEMO_TESTS=ON && cmake --build build/mac && ctest --test-dir build/mac
 HP2_DATA=$PWD/game-hp2/files build/mac/hp2   # dev run
-tools/make_app.sh                            # build/app/SpeedBreaker HP2.app
+tools/make_app.sh                            # build/app/NFS Hot Pursuit 2.app
 ```
 Needs Homebrew `sdl3 molten-vk vulkan-headers glslang`.
 
 ## Next
 - Not yet checked by a person: keyboard/gamepad feel, sound, fullscreen, saves, 60 fps setting, performance at higher scale.
 - Play-test the app: first-run install dialog, Exit, fullscreen, 60 fps, saves across runs.
+
+## Release design (2026-11-18): the game is built on the player's Mac
+- **DMG** (`tools/make_dmg.sh`, ~10 MB): `NFS Hot Pursuit 2 Installer.app` = `installer/install.sh` + a kit: our sources, upstream's
+  sources at the pin with `patches/`, compiled SPIR-V shaders, SDL3 (built for macOS 15, `tools/build_deps.sh`), MoltenVK, headers,
+  license texts. `tests/dmg_no_game_code.sh` checks it (disc file names and SHA-1s, generated code, 64 windows of the program's
+  `.text`, this Mac's paths); a DMG with 1.2 MB of the program in it fails it (46 windows found).
+- **Installer:** Command Line Tools (`installer/clt.sh`), the disc (bsdtar + SHA-1), `/usr/bin/python3` (3.9: the generator's
+  output is byte-identical to Python 3.14's), `mac/build_game.sh` (plain clang++, `xargs -P` on the performance cores, sources from
+  `mac/sources.txt` shared with CMake), `mac/assemble_app.sh`, then `/Applications/NFS Hot Pursuit 2.app`.
+- **Checked:** from the DMG in a throwaway HOME with the real ISO: install + build in 40 s on the M1 Pro; the app links only
+  `@rpath/libSDL3.0.dylib` (+ system), minos 15.0, ad-hoc signed, runs (menus, 3D). Determinism gate on the CMake build: pass.
+- Lesson: in a real window, scripted Enter presses land in different menus than headless (timing), so the demo-replay gate stays
+  on `hp2_headless`.

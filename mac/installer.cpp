@@ -1,7 +1,7 @@
-// SpeedBreaker HP2. GPL-3.0-or-later.
+// NFS Hot Pursuit 2. GPL-3.0-or-later.
 //
 // The first run: the player picks their disc image (.iso), and the game's folder on it (NFSHP2/, 2.9 GB) and its program
-// (SLUS_203.62, checked by SHA-1) are copied into ~/Library/Application Support/SpeedBreaker HP2/game, beside the port's own data
+// (SLUS_203.62, checked by SHA-1) are copied into ~/Library/Application Support/NFS Hot Pursuit 2/game, beside the port's own data
 // files (upstream's recomp/data: the app's Resources/data). macOS's own bsdtar reads the ISO. Nothing of the game is in the app.
 #include "installer.h"
 
@@ -108,7 +108,7 @@ std::string user_dir()
 {
     static const std::string dir = [] {
         const char *home = getenv("HOME");
-        fs::path p = fs::path(home ? home : ".") / "Library" / "Application Support" / "SpeedBreaker HP2";
+        fs::path p = fs::path(home ? home : ".") / "Library" / "Application Support" / "NFS Hot Pursuit 2";
         std::error_code ec;
         fs::create_directories(p, ec);
         return p.string() + "/";
@@ -128,7 +128,7 @@ std::string install_ensure(SDL_Window *window)
     const SDL_MessageBoxData box = {SDL_MESSAGEBOX_INFORMATION, window, kTitle,
                                     "The game's files are not installed yet.\n\nChoose your disc image of Need for Speed: Hot Pursuit 2 "
                                     "(PlayStation 2, USA, SLUS-20362). Its files are copied to ~/Library/Application Support/"
-                                    "SpeedBreaker HP2 (2.9 GB, about a minute).",
+                                    "NFS Hot Pursuit 2 (2.9 GB, about a minute).",
                                     2, buttons, nullptr};
     // HP2_INSTALL_ISO=<image>: that image, no questions (tests, scripts); one try
     const char *scripted = getenv("HP2_INSTALL_ISO");

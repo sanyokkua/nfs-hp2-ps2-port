@@ -1,11 +1,11 @@
-// SpeedBreaker HP2. GPL-3.0-or-later.
+// NFS Hot Pursuit 2. GPL-3.0-or-later.
 // The player's folder and the game's files in it (installer.cpp).
 #pragma once
 #include <string>
 
 struct SDL_Window;
 
-// ~/Library/Application Support/SpeedBreaker HP2/ (hp2.ini, saves/, logs/, game/), made if missing; ends with '/'
+// ~/Library/Application Support/NFS Hot Pursuit 2/ (hp2.ini, saves/, logs/, game/), made if missing; ends with '/'
 std::string user_dir();
 
 // The game's folder (NFSHP2/ and data/): HP2_DATA when set, else user_dir()/game, installed from the player's disc image first
