@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Nothing yet.
+
 ## 0.2.0 (2026-11-19)
 
 - **The PS2's menus:** Options, Audio, Display, the Controller screens and the pause menu look and work as on the PS2 (nfshp2-port-win's
