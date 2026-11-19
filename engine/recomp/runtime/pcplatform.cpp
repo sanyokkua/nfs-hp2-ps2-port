@@ -100,7 +100,9 @@ static void patch_language(u32 desc)
     const int slot = (int)LW(desc + 72);
     std::vector<std::pair<int, std::string>> texts;
     if (slot == 0)
-        for (auto &t : kText) texts.push_back({t.id, t.text});
+        for (auto &t : kText)
+            // the PS2's menus keep their own words: the Display screen's name and the Options rows' help lines
+            if (!pc_ps2_menus() || (t.id != 100004 && (t.id < 100021 || t.id > 100026))) texts.push_back({t.id, t.text});
     for (auto &o : pc_language_overrides(slot)) {
         bool had = false;
         for (auto &t : texts)

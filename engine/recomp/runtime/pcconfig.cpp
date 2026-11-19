@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -25,9 +26,17 @@ int pc_aspect_limit()
     return (int)((r < 4.0 ? r : 4.0) * 10000.0 + 0.5);
 }
 
+// aspect: 0 4:3, 1 the screen's own shape (pc_aspect_limit), 2 16:10, 3 16:9, 4 21:9 (the Mac overlay's; a shape other than the
+// screen's gets black bars, blit_to_window). Width over height times 10000; 0 is 4:3.
 int pc_aspect()
 {
-    return g_cfg.aspect ? pc_aspect_limit() : 0;
+    switch (g_cfg.aspect) {
+    case 0: return 0;
+    case 2: return 16000;
+    case 3: return 17778;
+    case 4: return 23704;
+    default: return pc_aspect_limit();
+    }
 }
 
 int g_pad_playstation;
@@ -115,7 +124,8 @@ void PcConfig::default_pad()
 // the menus: the arrows, Enter and Esc (window_pad), a key for each of the game's other menu buttons
 int pc_menu_key(int b)
 {
-    static const int kKey[PCB_COUNT] = {0x26, 0x28, 0x25, 0x27, 0x0D, 0x20, 0x70, PC_BACK_KEY,    // F1, help
+    // Circle, the help, is Tab: F1 opens the Mac's settings overlay, as in the port's other games
+    static const int kKey[PCB_COUNT] = {0x26, 0x28, 0x25, 0x27, 0x0D, 0x20, 0x09, PC_BACK_KEY,    // Tab, help
                                         'Q', 'E', '1', '2', 0, 0x0D, 0x08};
     return kKey[b];
 }
@@ -134,7 +144,7 @@ int pc_menu_pad(int b)
 int pc_menu_key_split(int player, int b)
 {
     static const int kKey[2][PCB_COUNT] = {
-        {0x26, 0x28, 0x25, 0x27, 0x0D, 0xA3, 0x70, PC_BACK_KEY, 0xBC, 0xBE, 0, 0, 0, 0x0D, 0x08},   // comma, period, Backspace
+        {0x26, 0x28, 0x25, 0x27, 0x0D, 0xA3, 0x09, PC_BACK_KEY, 0xBC, 0xBE, 0, 0, 0, 0x0D, 0x08},   // Tab, comma, period, Backspace
         {'W', 'S', 'A', 'D', 0x20, 'F', 0x71, 'C', 'Q', 'E', '1', '2', 0, 0x20, 'R'}};              // F2
     return kKey[player][b];
 }
@@ -280,6 +290,9 @@ static void write_controls(FILE *f)
 // the keys of the file, in the order they are written
 void pc_config_save()
 {
+    // one writer at a time: the Mac's settings menu saves from the render thread, the game's menus and its jobs from the game's
+    static std::mutex lock;
+    std::lock_guard<std::mutex> hold(lock);
     if (!g_controls_path.empty())
         if (FILE *c = fopen(g_controls_path.c_str(), "w")) {
             fprintf(c, "; This profile's controls.\n\n");
@@ -295,7 +308,7 @@ void pc_config_save()
     fprintf(f, "window=%d,%d     ; the window's picture\n", g_cfg.win_w, g_cfg.win_h);
     fprintf(f, "fullscreen_size=%d,%d ; the picture's size in fullscreen, stretched to the monitor; 0,0 = the monitor's own\n", g_cfg.fs_w, g_cfg.fs_h);
     fprintf(f, "render_scale=%d   ; percent of the resolution the picture is drawn at: 20 to 200 in steps of 20\n", g_cfg.render_scale);
-    fprintf(f, "aspect=%d           ; the race's picture: 0 = 4:3, 1 = as wide as the resolution (16:10, 16:9, 21:9, 32:9 ...)\n", g_cfg.aspect ? 1 : 0);
+    fprintf(f, "aspect=%d           ; the race's picture: 0 = 4:3, 1 = the screen's shape, 2 = 16:10, 3 = 16:9, 4 = 21:9\n", g_cfg.aspect);
     fprintf(f, "aa_mode=%d          ; anti-aliasing: 0 = off, 1 = MSAA, 2 = SMAA\n", g_cfg.aa_mode);
     fprintf(f, "aa_level=%d         ; 2 or 4: MSAA samples, SMAA quality\n", g_cfg.aa_level);
     fprintf(f, "aniso=%d            ; anisotropic filtering: 0 = off, 2, 4, 8, 16\n", g_cfg.aniso);
@@ -365,7 +378,7 @@ static bool read_settings(const std::string &path, bool &old_controls)
             for (char *e = g_cfg.language; *e; e++) *e = (char)toupper((unsigned char)*e);
         }
         else if (!strcmp(key, "fullscreen")) g_cfg.fullscreen = n != 0;
-        else if (!strcmp(key, "aspect")) g_cfg.aspect = clampi(n, 0, 2);
+        else if (!strcmp(key, "aspect")) g_cfg.aspect = clampi(n, 0, 4);
         else if (!strcmp(key, "aa")) {      // an older hp2.ini: multisampling, 0, 2, 4 or 8
             g_cfg.aa_mode = n >= 2;
             if (n >= 2) g_cfg.aa_level = n >= 4 ? 4 : 2;

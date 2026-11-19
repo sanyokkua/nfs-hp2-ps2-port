@@ -5,3 +5,4 @@
 void *host_metal_layer();               // the window's CAMetalLayer (for vkCreateMetalSurfaceEXT); null before the window exists
 void host_view_pixels(int &w, int &h);  // the window's drawable size in pixels (0, 0 while minimized)
 int host_refresh_hz();                  // the window's screen, frames a second (0: unknown)
+void host_display_pixels(int &w, int &h);   // the window's screen, its whole size in pixels (0, 0: unknown)

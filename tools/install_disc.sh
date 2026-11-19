@@ -1,12 +1,9 @@
 #!/bin/bash
-# Your disc image (.iso, USA SLUS-20362) into game-hp2/files: NFSHP2/ as on the disc, data/ = the program + upstream's data files.
+# Your disc image (.iso, USA SLUS-20362) into game/extracted, as the installer does it for players (mac/import_disc.py):
+# NFSHP2/ as on the disc, data/ = the program + the port's data files.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 ISO="${1:?usage: tools/install_disc.sh <disc image .iso>}"
-OUT=game-hp2/files
-mkdir -p "$OUT/data"
-bsdtar -xf "$ISO" -C "$OUT" NFSHP2 SLUS_203.62
-chmod -R u+w "$OUT"
-mv -f "$OUT/SLUS_203.62" "$OUT/data/SLUS_203.62"
-cp -R upstream/recomp/data/. "$OUT/data/"
-echo "game: $OUT ($(du -sh "$OUT" | cut -f1))"
+mkdir -p game
+python3 -I mac/import_disc.py "$ISO" game/extracted engine/recomp/data
+echo "game: game/extracted ($(du -sh game/extracted | cut -f1))"

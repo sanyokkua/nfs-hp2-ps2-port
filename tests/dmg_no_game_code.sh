@@ -2,7 +2,7 @@
 # The players' DMG holds no game code and no game data. Fails on:
 #   - the disc's files by name (SLUS_*, ZZDATA.BIN, ZDIR.BIN, *.IRX, *.IMG, SYSTEM.CNF) or *.iso
 #   - the generated C++ or objects made from it (code_*.cpp, functable.cpp, funcs.h, iop_stream_*.cpp, *.o) or a game binary (hp2)
-#   - any file with the SHA-1 of a file on the disc (game-hp2/files, when it is there)
+#   - any file with the SHA-1 of a file on the disc (game/extracted, when it is there)
 #   - two or more of 64 64-byte windows of the program's .text in one file
 #   - this Mac's home folder path (the builder's)
 # Adapted from NFSU2Deadware's tests/dmg_no_game_code.sh (MIT).   tests/dmg_no_game_code.sh <dmg>
@@ -16,7 +16,7 @@ bad() { echo "FAIL: $1"; fail=1; }
 while IFS= read -r f; do bad "a game file by name: ${f#$MNT/}"; done < <(find "$MNT" \( -iname 'SLUS_*' -o -iname ZZDATA.BIN -o -iname ZDIR.BIN \
   -o -iname '*.IRX' -o -iname '*.IMG' -o -iname SYSTEM.CNF -o -iname '*.iso' -o -name 'code_*.cpp' -o -name functable.cpp -o -name funcs.h \
   -o -name 'iop_stream_*.cpp' -o -name '*.o' -o -name hp2 \) -not -path '*/Applications/*')
-GAME="$ROOT/game-hp2/files"
+GAME="$ROOT/game/extracted"
 python3 -I - "$MNT" "$GAME" <<'PY' || fail=1
 import hashlib, os, struct, sys
 mnt, game = sys.argv[1], sys.argv[2]
@@ -49,7 +49,7 @@ if os.path.isdir(game):
         if hits >= 2:
             print('FAIL: %d windows of the program\'s code in %s' % (hits, p[len(mnt):])); bad = 1
 else:
-    print('note: no game-hp2/files here: the SHA-1 and code-window checks were skipped')
+    print('note: no game/extracted here: the SHA-1 and code-window checks were skipped')
 home = os.path.expanduser('~').encode()
 for p in files(mnt):
     if home in open(p, 'rb').read():

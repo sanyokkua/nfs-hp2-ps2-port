@@ -61,11 +61,23 @@ struct PcPage {
 // register a page; before the frontend is built (the page's screen is made as FRONTB loads)
 PcPage &pc_add_page(const char *name, const char *title);
 // the pages behind the Options screen's Controls and Graphics rows
+// The PS2's own menus (the Mac port's default): the port's Options, pages, Audio's Master Volume, the HUD rename, Calibrate's removal, the
+// controller pictures, the help hints and the pause menu's centring are off, and every setting is in the Mac's overlay. Kept: the main
+// menu's Exit row and the memory card's quick screens. HP2_PC_MENUS=1: nfshp2-port-win's PC menus, as before (for comparison).
+bool pc_ps2_menus();
 void pc_options_pages(const char *controls, const char *graphics);
 void pc_profiles_page(const char *name);    // Options' Profiles
 // the hint of the button that deletes, on that page: Square's icon or the Delete key's, shown or not
 void pc_delete_hint(const char *page, bool pad, bool show, const char *text = "Delete");
 void pc_retranslate();                      // the language changed: the port's texts on the frontend's screens again
+// Work for the game's thread from another one (the Mac's settings menu, src/overlay/hp2_options.cpp): what calls into the game
+// (pc_call) or writes its memory. Run by the frontend's next frame (HOOK_Tick__17FlailerScreenList), in order; any thread.
+void pc_game_job(std::function<void()> job);
+// The Mac menu's Cheats rows, by section (0 Effects, 1 Cars, 2 Cop Cars, 3 Tracks: the Cheat Menu's pages). pc_cheats_on: any of the
+// section is on in hp2.ini, any thread (the sections as the menus' last frame read them from the game's table). pc_cheats_set: every
+// one of the section on or off, as its codes would; the game's thread (pc_game_job).
+bool pc_cheats_on(int section);
+void pc_cheats_set(int section, bool on);
 PcPage *pc_find_page(const char *name);
 // go to a page now (from a row that opens another page)
 void pc_open_page(const char *name);

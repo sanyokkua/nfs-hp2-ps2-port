@@ -1,14 +1,13 @@
 #!/bin/bash
-# The game's .app from a built binary: MoltenVK and SDL3 in Frameworks, the port's data files and the icon in Resources, ad-hoc
-# signed. Run by the installer on the player's Mac and by tools/make_app.sh.
-#   mac/assemble_app.sh <binary> <deps (lib/)> <port data dir> <icon .icns> <app path> <version>
+# The game's .app from a built binary: MoltenVK and SDL3 in Frameworks, the icon in Resources, ad-hoc signed. Run by the installer
+# on the player's Mac and by tools/make_app.sh. (The port's data files are in the game folder, beside the disc's: mac/import_disc.py.)
+#   mac/assemble_app.sh <binary> <libs dir> <icon .icns> <app path> <version>
 set -euo pipefail
-BIN="$1" DEPS="$2" DATA="$3" ICON="$4" APP="$5" VERSION="$6"
+BIN="$1" LIBS="$2" ICON="$3" APP="$4" VERSION="$5"
 rm -rf "$APP.part"
 mkdir -p "$APP.part/Contents/MacOS" "$APP.part/Contents/Frameworks" "$APP.part/Contents/Resources"
 cp "$BIN" "$APP.part/Contents/MacOS/hp2"
-cp "$DEPS/lib/libSDL3.0.dylib" "$DEPS/lib/libMoltenVK.dylib" "$APP.part/Contents/Frameworks/"
-cp -R "$DATA" "$APP.part/Contents/Resources/data"
+cp "$LIBS/libSDL3.0.dylib" "$LIBS/libMoltenVK.dylib" "$APP.part/Contents/Frameworks/"
 cp "$ICON" "$APP.part/Contents/Resources/hp2.icns"
 cat > "$APP.part/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

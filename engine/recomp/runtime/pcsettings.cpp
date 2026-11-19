@@ -124,6 +124,7 @@ bool mc_profiles_enabled();
 std::string mc_profile_dir(const std::string &name);
 std::vector<std::string> mc_profiles();
 void mc_profile_use(const std::string &name);
+std::string mc_card_dir();     // the card's folder (HP2_MEMCARD, or the profile's); empty: no card
 bool mc_profile_delete(const std::string &name);
 
 static const u32 kMoveBackScreen = 0x170320, kFred = 0x2fc050, kFredName1 = kFred + 0x10d90;
@@ -150,8 +151,10 @@ static void exit_save_off() { g_fred_ready = false; }
 // the main menu is up: the profile's load is behind
 void pc_profile_loaded()
 {
-    if (g_profile.empty() || g_fred_ready) return;
-    snprintf(g_exit_save, sizeof g_exit_save, "%s/save.dat", mc_profile_dir(g_profile).c_str());
+    if (g_fred_ready) return;
+    if (!g_profile.empty()) snprintf(g_exit_save, sizeof g_exit_save, "%s/save.dat", mc_profile_dir(g_profile).c_str());
+    else if (g_profiles_off && !mc_card_dir().empty()) snprintf(g_exit_save, sizeof g_exit_save, "%s/save.dat", mc_card_dir().c_str());    // one card
+    else return;
     g_fred_ready = true;
 }
 
@@ -441,9 +444,37 @@ static void cheat_rows(PcPage &pg, int section)
     }
 }
 
+// The sections of the table's entries as the menus' last frame read them, for the Mac menu's rows on its own thread (pcmenu.h)
+static std::atomic<int> g_cheat_known{0};
+static std::atomic<signed char> g_cheat_sections[sizeof g_cfg.cheats];
+
+bool pc_cheats_on(int section)
+{
+    const int n = g_cheat_known.load();
+    for (int i = 0; i < n; i++)
+        if (g_cheat_sections[i].load() == section && g_cfg.cheats[i]) return true;
+    return false;
+}
+
+void pc_cheats_set(int section, bool on)
+{
+    for (int i = 0; i < cheat_count(); i++)
+        if (cheat_section(i) == section) cheat_set(i, on);      // off: the entry's +48 cleared, as Cheat Menu's Off did
+    // what is on is set again every frame of the menus while cheat_menu is on (cheats_frame); with nothing on it is off
+    bool any = false;
+    for (int i = 0; i < cheat_count(); i++) any |= g_cfg.cheats[i] != 0;
+    g_cfg.cheat_menu = any;
+    pc_config_save();
+}
+
 // every frame of the menus: what is on stays on, and F8 opens the pages
 static void cheats_frame()
 {
+    {
+        const int n = cheat_count();
+        for (int i = 0; i < n; i++) g_cheat_sections[i] = (signed char)cheat_section(i);
+        g_cheat_known = n;
+    }
     {   // TEMP HP2_CHEATLOG=1: what the game's own counts say, once the menus have run a while
         static const bool on = getenv("HP2_CHEATLOG") != nullptr;
         static int frames;
@@ -464,7 +495,7 @@ static void cheats_frame()
     const bool down = window_key_down(0x77);            // F8
     const bool fresh = down && !held;
     held = down;
-    if (!fresh || pc_racing() || !pc_cursor_wanted()) return;       // a menu of the front end is up, not a film or a loading screen
+    if (!fresh || pc_ps2_menus() || pc_racing() || !pc_cursor_wanted()) return;       // a menu of the front end is up, not a film or a loading screen
     if (pc_page_row("PC Cheats") >= 0) return;
     for (const char *name : kCheatPages)
         if (pc_page_row(name) >= 0) return;
@@ -473,6 +504,10 @@ static void cheats_frame()
 
 void pc_settings_register()
 {
+    if (pc_ps2_menus()) {                   // no pages: the settings are the Mac overlay's; the cheats it turns on stay on
+        pc_on_frame(cheats_frame);
+        return;
+    }
     pc_options_pages("PC Controls", "PC Graphics");
     pc_on_frame(poll_capture);
     pc_on_frame(profiles_frame);

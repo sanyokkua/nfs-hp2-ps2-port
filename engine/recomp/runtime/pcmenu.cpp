@@ -12,6 +12,7 @@
 #include "pcconfig.h"
 #include "pclang.h"
 #include <map>
+#include <mutex>
 #include <chrono>
 #include <cmath>
 
@@ -632,6 +633,23 @@ static void page_gray(PcPage &pg, bool all)
 
 static std::vector<std::function<void()>> g_frame_fns;
 void pc_on_frame(std::function<void()> fn) { g_frame_fns.push_back(std::move(fn)); }
+
+static std::mutex g_jobs_lock;
+static std::vector<std::function<void()>> g_jobs;
+void pc_game_job(std::function<void()> job)
+{
+    std::lock_guard<std::mutex> lock(g_jobs_lock);
+    g_jobs.push_back(std::move(job));
+}
+static void jobs_frame()
+{
+    std::vector<std::function<void()>> now;
+    {
+        std::lock_guard<std::mutex> lock(g_jobs_lock);
+        now.swap(g_jobs);
+    }
+    for (auto &f : now) f();
+}
 
 void pc_set_blurb(const std::string &text)
 {
@@ -1367,6 +1385,7 @@ static void master_show()
 void HOOK___18AudioOptionsScreeni(Ctx &c, void (*orig)(Ctx &))
 {
     g_pc_ctx = &c;
+    if (pc_ps2_menus()) return orig(c);
     u32 self = c.r[4].w[0];
     orig(c);
     u32 ret = c.r[2].w[0], list = self + AUDIO_SCROLL;
@@ -1382,6 +1401,7 @@ void HOOK___18AudioOptionsScreeni(Ctx &c, void (*orig)(Ctx &))
 void HOOK_HandleEvent__18AudioOptionsScreeniP18ScreenCallbackData(Ctx &c, void (*orig)(Ctx &))
 {
     g_pc_ctx = &c;
+    if (pc_ps2_menus()) return orig(c);
     u32 self = c.r[4].w[0], msg = c.r[5].w[0], data = c.r[6].w[0];
     u32 item = msg <= 10 ? LW(data) : 0;
     if (item != menuitem_hash(0)) {
@@ -1540,9 +1560,22 @@ static void on_project_loaded(u32 tail)
         }
 }
 
+bool pc_ps2_menus()
+{
+    static const bool ps2 = getenv("HP2_PC_MENUS") == nullptr;
+    return ps2;
+}
+
 static void port_edits(u32 tail)
 {
     if (LW(tail + 8) != FRONTB_PROJECT) return;
+    if (pc_ps2_menus()) {                   // the PS2's screens, and the main menu's Exit
+        g_page_alloc = true;
+        add_exit_row(tail);
+        g_project_gen++;
+        g_page_alloc = false;
+        return;
+    }
     g_page_alloc = true;
     for (PcPage *pg : pages()) build_page(tail, *pg);
     add_exit_row(tail);
@@ -1567,7 +1600,7 @@ static void port_edits(u32 tail)
 static void center_pause_menu(u32 project)
 {
     static const bool exact = getenv("HP2_NATIVEEXACT") != nullptr;
-    if (exact) return;
+    if (exact || pc_ps2_menus()) return;
     u32 screen = find_screen(project, PAUSE_SCREEN);
     if (!screen) return;
     u32 list = screen + 32;
@@ -1620,7 +1653,9 @@ void HOOK___14tOptionsScreeni(Ctx &c, void (*orig)(Ctx &))
     grid_end(false, false);
     orig(c);
     u32 ret = c.r[2].w[0];
-    if (hash == OPTIONS_SCREEN) {
+    if (hash == OPTIONS_SCREEN && pc_ps2_menus()) {
+        // the PS2's Options as they are
+    } else if (hash == OPTIONS_SCREEN) {
         // NTSC hides item 7 (Languages): all seven slots are the port's rows
         pc_call(fn::GrayMenuItem, menuitem_hash(7), 1, hash);
         // the scroll stays: coming back, the game puts the highlight on the slot it had
@@ -1655,7 +1690,7 @@ void HOOK_HandleEvent__14tOptionsScreeniP18ScreenCallbackData(Ctx &c, void (*ori
     u32 hash = LW(self);
     if (PcPage *pg = page_by_hash(hash)) {
         if (page_event(*pg, self, msg, data)) return;
-    } else if (hash == OPTIONS_SCREEN && options_event(self, msg, data, c, orig)) {
+    } else if (hash == OPTIONS_SCREEN && !pc_ps2_menus() && options_event(self, msg, data, c, orig)) {
         return;
     }
     orig(c);
@@ -1667,6 +1702,7 @@ void HOOK___21tDisplayOptionsScreeni(Ctx &c, void (*orig)(Ctx &))
     g_pc_ctx = &c;
     u32 hash = c.r[5].w[0];
     orig(c);
+    if (pc_ps2_menus()) return;             // Calibrate Display stays, as on the PS2
     u32 ret = c.r[2].w[0];
     pc_call(fn::GrayMenuItem, menuitem_hash(9), 2, hash);
     c.r[2].d[0] = sx32(ret);
@@ -1680,6 +1716,7 @@ void HOOK_DrawScreen__20JoystickConfigScreen(Ctx &c, void (*orig)(Ctx &))
     g_pc_ctx = &c;
     const u32 self = c.r[4].w[0];
     orig(c);
+    if (pc_ps2_menus()) return;             // the game's own pictures
     pc_call(0x144a28, LW(self + 0x10), 0x0b2ad6df, pc_hash("CONTROLLER30"));
 }
 
@@ -2139,6 +2176,7 @@ void HOOK_Tick__17FlailerScreenList(Ctx &c, void (*orig)(Ctx &))
     list_frame();
     grid_typed_frame();
     page_back_frame();
+    jobs_frame();
     for (auto &f : g_frame_fns) f();
     if (g_pc_ui_dirty.exchange(false)) pc_refresh_page();
     if (go && ++tick == (strchr(go, ',') ? atoi(strchr(go, ',') + 1) : 900)) {

@@ -198,7 +198,7 @@ void HOOK_ShouldSeeLanguageSelectScreen__Fv(Ctx &c, void (*orig)(Ctx &))
 {
     const u32 gp = c.r[28].w[0];
     orig(c);
-    if (!c.r[2].w[0] && g_cfg.ask_language && (s32)LW(gp - 21132) == 1 && !LW(0x2effe0)) c.r[2].d[0] = 1;
+    if (!c.r[2].w[0] && !pc_ps2_menus() && g_cfg.ask_language && (s32)LW(gp - 21132) == 1 && !LW(0x2effe0)) c.r[2].d[0] = 1;
     if (!c.r[2].w[0]) return;
     g_asking = true;
     g_cfg.ask_language = false;     // asked once: the language in use stays, unless the screen picks another (it need not set the same)

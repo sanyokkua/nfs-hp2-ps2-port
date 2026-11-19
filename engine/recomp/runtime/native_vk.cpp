@@ -36,6 +36,9 @@ extern FILE *g_hle_log;
 #ifndef _WIN32
 #define VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME "VK_EXT_full_screen_exclusive"   // a Windows extension: never listed here
 #endif
+#ifdef __APPLE__
+#include "overlay.h"        // the Mac's settings menu, drawn on the window's image last (src/overlay/overlay_vk.cpp)
+#endif
 
 static const uint32_t kVert[] =
 #include "native.vert.spv.h"
@@ -436,6 +439,8 @@ static struct {
     VkSwapchainKHR swapchain;
     std::vector<VkImage> swap_images;
     int swap_w, swap_h;                     // the swapchain's images
+    VkFormat swap_format;                   // their format
+    VkImageUsageFlags swap_usage;           // and what they can be used for
     int lines;                              // g_lines as the picture was made for it
     int swap_cw, swap_ch;                   // the window's client size it was made for
     bool swap_stale;                        // to be made again
@@ -3269,6 +3274,9 @@ static void make_swapchain(int w, int h)
     g.swap_cw = w, g.swap_ch = h;
     g.swap_stale = g.swap_check = false;
     auto drop = [] {
+#ifdef __APPLE__
+        overlay_vulkan_swapchain_gone();    // its views of the images go first (the device is idle)
+#endif
         if (g.swapchain) vkDestroySwapchainKHR(g.dev, g.swapchain, nullptr);
         g.swapchain = VK_NULL_HANDLE;
         g.swap_images.clear();
@@ -3342,6 +3350,10 @@ static void make_swapchain(int w, int h)
                           std::clamp((uint32_t)h, caps.minImageExtent.height, caps.maxImageExtent.height)};
     ci.imageArrayLayers = 1;
     ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+#ifdef __APPLE__
+    // the settings menu draws on the image (a render pass), and its test shot reads it back: where the surface has them
+    ci.imageUsage |= caps.supportedUsageFlags & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+#endif
     ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ci.preTransform = caps.currentTransform;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -3370,6 +3382,8 @@ static void make_swapchain(int w, int h)
     g.swap_w = (int)ci.imageExtent.width;
     g.swap_h = (int)ci.imageExtent.height;
     g.swap_transform = ci.preTransform;
+    g.swap_format = ci.imageFormat;
+    g.swap_usage = ci.imageUsage;
     uint32_t count = 0;
     vkGetSwapchainImagesKHR(g.dev, made, &count, nullptr);
     g.swap_images.resize(count);
@@ -3561,6 +3575,12 @@ static void blit_to_window(VkImage image, const NativeFrame &frame)
     if (g_cfg.show_fps) draw_fps(image, bx + 8, by + 8);
     after_write();
     draw_notice(image, bx + bw, by + bh, kFpsBytes / 2);
+#ifdef __APPLE__
+    {   // the settings menu over all of it, when it is open (nothing at all when it is not): TRANSFER_DST before and after
+        const OverlayVulkan ov = {gipa, g.instance, g.phys, g.dev, g.family, g.queue};
+        overlay_present_vulkan(&ov, g.cmd, image, g.swap_format, (uint32_t)g.swap_w, (uint32_t)g.swap_h, g.swap_usage);
+    }
+#endif
     image_barrier(image, 0, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, 0,
                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 }

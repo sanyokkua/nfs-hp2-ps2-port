@@ -6,8 +6,9 @@
 // pointer, the motors). The game itself runs on a thread of its own: ps2.cpp's main, built as hp2_game_main (HP2_HOST_MAIN).
 #include "host_input.h"
 #include "host_mac.h"
-#include "installer.h"
+#include "player.h"
 #include "pcconfig.h"
+#include "overlay.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_metal.h>
@@ -29,7 +30,7 @@ void host_log_flush();
 namespace {
 SDL_Window *g_window;
 std::atomic<void *> g_layer{nullptr};
-std::atomic<int> g_px_w{0}, g_px_h{0}, g_hz{0};
+std::atomic<int> g_px_w{0}, g_px_h{0}, g_hz{0}, g_disp_w{0}, g_disp_h{0};
 
 // ---- keys: SDL's scancodes (the key's place, as Windows' virtual keys mostly are) as virtual-key codes ----
 int vk_of(SDL_Scancode sc)
@@ -107,6 +108,11 @@ void view_changed(HostInput &in)
     store(in.view_w, w > 0 ? w : 1), store(in.view_h, h > 0 ? h : 1);
     const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g_window));
     g_hz = mode && mode->refresh_rate > 0 ? (int)(mode->refresh_rate + 0.5f) : 0;
+    // the screen's whole size in pixels, windowed or not (the overlay's list of fullscreen sizes)
+    if (const SDL_DisplayMode *desk = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(g_window))) {
+        const float d = desk->pixel_density > 0 ? desk->pixel_density : 1.0f;
+        g_disp_w = (int)(desk->w * d + 0.5f), g_disp_h = (int)(desk->h * d + 0.5f);
+    }
 }
 
 void mouse_moved(HostInput &in, float x, float y)
@@ -159,16 +165,18 @@ void pads_frame(HostInput &in)
             store(p.ok, 0);
             continue;
         }
+        // the settings menu has the pads while it is open, and until every button is up after it: the game sees a pad at rest
+        const bool neutral = overlay_input_blocked() != 0;
         int32_t mask = 0;
         for (const auto &k : kButtons)
             if (SDL_GetGamepadButton(g, k.b)) mask |= k.bit;
-        store(p.mask, mask);
-        store(p.lt, SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-        store(p.rt, SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
-        store(p.axis[0], SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTX));
-        store(p.axis[1], SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTY));
-        store(p.axis[2], SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX));
-        store(p.axis[3], SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTY));
+        store(p.mask, neutral ? 0 : mask);
+        store(p.lt, neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+        store(p.rt, neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+        store(p.axis[0], neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTX));
+        store(p.axis[1], neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTY));
+        store(p.axis[2], neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX));
+        store(p.axis[3], neutral ? 0 : SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTY));
         const SDL_GamepadType type = SDL_GetGamepadType(g);
         store(p.playstation, type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4 || type == SDL_GAMEPAD_TYPE_PS5);
         store(p.ok, 1);
@@ -181,6 +189,28 @@ void pads_frame(HostInput &in)
             SDL_RumbleGamepad(g, (Uint16)(large * 257), small ? 0xFFFF : 0, want ? 1000 : 0);
         }
     }
+}
+
+// Every key the game holds goes up (the settings menu just opened: it has the keyboard now), each with its event, as a real
+// release would give it.
+void keys_release(HostInput &in)
+{
+    for (int vk = 0; vk < (int)(sizeof in.keys / sizeof in.keys[0]); vk++) {
+        if (!__atomic_load_n(&in.keys[vk], __ATOMIC_ACQUIRE)) continue;
+        __atomic_store_n(&in.keys[vk], (uint8_t)0, __ATOMIC_RELEASE);
+        const uint32_t head = __atomic_load_n(&in.ev_head, __ATOMIC_RELAXED);
+        in.ev[head % 64] = {vk, 0, 0};
+        __atomic_store_n(&in.ev_head, head + 1, __ATOMIC_RELEASE);
+    }
+    store(in.mouse_buttons, 0);
+}
+
+[[noreturn]] void quit_now()
+{
+    pc_save_on_exit();          // the profile's save, as the Windows window's WM_DESTROY
+    host_log_flush();
+    fflush(nullptr);
+    _exit(0);
 }
 
 // the game's thread: a big stack, as the EE's code nests deep (the Windows build's main thread)
@@ -197,6 +227,15 @@ void *game_thread(void *)
 void *host_metal_layer() { return g_layer.load(std::memory_order_acquire); }
 void host_view_pixels(int &w, int &h) { w = g_px_w, h = g_px_h; }
 int host_refresh_hz() { return g_hz; }
+void host_display_pixels(int &w, int &h) { w = g_disp_w, h = g_disp_h; }
+
+// the settings menu's requests (overlay.h), on this thread: fullscreen is hp2.ini's, which the loop below follows
+void overlay_host_fullscreen(int on)
+{
+    g_cfg.fullscreen = on != 0;
+    pc_config_save();
+}
+void overlay_host_quit() { quit_now(); }    // Quit Game: as closing the window
 
 int main(int, char **)
 {
@@ -214,22 +253,18 @@ int main(int, char **)
     }
     SDL_MetalView view = SDL_Metal_CreateView(g_window);
     g_layer.store(view ? SDL_Metal_GetLayer(view) : nullptr, std::memory_order_release);
-    // the game's files (installed from the player's disc on the first run), and the player's folder as the working directory:
-    // hp2.ini, saves/ and the log go there (the runtime opens them by relative paths outside Windows)
-    const std::string game_dir = install_ensure(g_window);
+    // the player's folder (player.h): the working directory, the memory card, the log; the game's files the installer put there
+    const std::string game_dir = player_setup();
     if (game_dir.empty()) return 0;
     setenv("HP2_DATA", game_dir.c_str(), 1);
-    if (chdir(user_dir().c_str()) != 0) fprintf(stderr, "host: no folder %s\n", user_dir().c_str());
-    if (!isatty(2)) {                           // started from Finder: the log to a file, the last run's kept beside it
-        mkdir("logs", 0755);
-        rename("logs/hp2.log", "logs/hp2_prev.log");
-        if (freopen("logs/hp2.log", "w", stderr)) setvbuf(stderr, nullptr, _IOLBF, 0);
-    }
     fprintf(stderr, "host: game %s, player's folder %s\n", game_dir.c_str(), user_dir().c_str());
     HostInput &in = host_input();
     view_changed(in);
     store(in.focused, 1);
     pads_open();
+    // the settings menu (src/overlay): its rows before the game's thread starts, its input from the window's events
+    overlay_settings_load();
+    overlay_init(g_window);
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -240,18 +275,17 @@ int main(int, char **)
         return 1;
     }
 
-    bool cursor_shown = true, fullscreen = false;
+    bool cursor_shown = true, fullscreen = false, blocked = false;
     for (;;) {
         SDL_Event e;
         if (SDL_WaitEventTimeout(&e, 4)) do {
+            if (overlay_event(&e)) continue;    // the settings menu's (F1, Cmd+, Back + Start; everything while it is open)
             switch (e.type) {
-            case SDL_EVENT_QUIT:
-                pc_save_on_exit();          // the profile's save, as the Windows window's WM_DESTROY
-                host_log_flush();
-                fflush(nullptr);
-                _exit(0);
+            case SDL_EVENT_QUIT: quit_now();
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP:
+                // after the menu closed, keys go back to the game once all are up: until then only their releases do
+                if (e.key.down && overlay_input_blocked()) break;
                 // Cmd+Enter / Cmd+F: fullscreen (Alt+Enter on Windows); Cmd+Q is the menu's Quit
                 if (e.key.down && !e.key.repeat && (e.key.mod & SDL_KMOD_GUI) &&
                     (e.key.scancode == SDL_SCANCODE_RETURN || e.key.scancode == SDL_SCANCODE_F)) {
@@ -291,10 +325,14 @@ int main(int, char **)
             default: break;
             }
         } while (SDL_PollEvent(&e));
+        overlay_main_tick();
+        const bool now_blocked = overlay_input_blocked() != 0;
+        if (now_blocked && !blocked) keys_release(in);
+        blocked = now_blocked;
         pads_frame(in);
         // what the game asks of the window: its pointer, fullscreen (Options > Graphics, hp2.ini)
         const bool want_cursor = __atomic_load_n(&in.cursor_wanted, __ATOMIC_RELAXED) != 0;
-        if (want_cursor != cursor_shown) (cursor_shown = want_cursor) ? SDL_ShowCursor() : SDL_HideCursor();
+        if (!overlay_is_open() && want_cursor != cursor_shown) (cursor_shown = want_cursor) ? SDL_ShowCursor() : SDL_HideCursor();
         const bool want_fs = g_cfg.fullscreen != 0;
         if (want_fs != fullscreen) SDL_SetWindowFullscreen(g_window, fullscreen = want_fs);
     }

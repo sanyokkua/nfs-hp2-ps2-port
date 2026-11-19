@@ -4,13 +4,15 @@ Copyright (C) 2026 Oleksandr Kostenko (sanyokkua) and contributors
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
 published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See LICENSE.
 
-This project is built on, and its installer bundles the source code of, nfshp2-port-win by ZloiKILLER
+This project is built on, and holds (engine/) and its installer bundles the source code of, nfshp2-port-win by ZloiKILLER
 (https://github.com/ZloiKILLER/nfshp2-port-win): the static recompiler of the game and the PS2 runtime. Its files keep their
-authorship; this project's changes to them are in patches/. Anyone reusing this project's code: keep this credit, and the link to
-ZloiKILLER's project, with it.
+authorship; how engine/ was made from it is in docs/upstream-patches/, later changes are in this repository's history. Anyone
+reusing this project's code: keep this credit, and the link to ZloiKILLER's project, with it.
 
-Files from nfshp2-web by Vitorini (mac/web/) are under the MIT License (LICENSES/MIT-nfshp2-web.txt). The installer's scripts adapt
-NFSU2Deadware's by LeoDeadware (MIT, LICENSES/MIT-NFSU2Deadware.txt). Third-party libraries: THIRD_PARTY_NOTICES.md.
+Files from nfshp2-web by Vitorini (engine/src/mac/web/) are under the MIT License (LICENSES/MIT-nfshp2-web.txt). The installer's
+scripts adapt NFSU2Deadware's by LeoDeadware (MIT, LICENSES/MIT-NFSU2Deadware.txt). The settings overlay follows the NFS
+Underground ports' and SpeedBreaker's design; Dear ImGui (MIT), Roboto (Apache-2.0), SMAA (MIT) and the libraries:
+THIRD_PARTY_NOTICES.md.
 
 No game code or data is part of this project or its releases: the game is built on the player's Mac from their own disc.
 Need for Speed and Hot Pursuit are trademarks of Electronic Arts Inc. This is an unofficial fan project, not affiliated with or

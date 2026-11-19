@@ -13,7 +13,7 @@ enum PcButton {
 
 struct PcConfig {
     int fullscreen = 0;         // borderless fullscreen
-    int aspect = 0;             // the race's picture: 0 4:3, else as wide as the resolution (16:10 or 16:9: pc_aspect). The menus stay 4:3
+    int aspect = 0;             // the race's picture: 0 4:3, 1 the screen's shape, 2 16:10, 3 16:9, 4 21:9 (pc_aspect). The menus stay 4:3
     int fs_w = 0, fs_h = 0;     // fullscreen: the picture's size, stretched to the monitor; 0: the monitor's own
     int render_scale = 100;     // percent of the resolution the picture is drawn at, 20 to 200 in steps of 20
     int aa_mode = 0;            // anti-aliasing: 0 off, 1 MSAA (the scene in samples), 2 SMAA (the finished picture's edges)

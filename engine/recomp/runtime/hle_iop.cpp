@@ -705,6 +705,12 @@ std::vector<std::string> mc_profiles()
     return names;
 }
 
+std::string mc_card_dir()
+{
+    mc_setup();
+    return g_mc.root;
+}
+
 void mc_profile_use(const std::string &name)
 {
     const std::string dir = mc_profile_dir(name);
