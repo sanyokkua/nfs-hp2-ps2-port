@@ -1,0 +1,279 @@
+; The port's strings in Deutsch: tools/recomp/make_lang.py writes this file (the format is in recomp/runtime/pclang.h).
+@name Deutsch
+Audio	Audio
+Set the volume and the Jukebox.	Lautstärke und Jukebox einstellen.
+Controls	Steuerung
+Keyboard and gamepad.	Tastatur und Gamepad.
+Graphics	Grafik
+Window, resolution, detail.	Fenster, Auflösung, Details.
+HUD	HUD
+Set what you want to see.	Wählen Sie, was Sie sehen wollen.
+Profiles	Profile
+Choose, add or delete a profile.	Profil wählen, anlegen oder löschen.
+Player Names	Spielernamen
+Set your player names.	Spielernamen festlegen.
+Languages	Sprachen
+Choose the language of the game.	Sprache des Spiels wählen.
+Extras	Extras
+Bonus features of the game.	Bonusfunktionen des Spiels.
+The developers' debug menu, in the pause menu.	Das Debug-Menü der Entwickler, im Pausenmenü.
+Cheat Menu	Cheat-Menü
+F8 in the menus opens the game's cheats.	F8 in den Menüs öffnet die Cheats des Spiels.
+Cheats	Cheats
+Effects	Effekte
+The game's easter eggs.	Die Easter Eggs des Spiels.
+Cars	Autos
+Cars a code opens.	Autos, die ein Code freischaltet.
+Cop Cars	Polizeiautos
+Cop cars for You're The Cop.	Polizeiautos für den Polizei-Modus.
+Tracks	Strecken
+Tracks a code opens.	Strecken, die ein Code freischaltet.
+All	Alle
+Every one in this list, on or off.	Alle in dieser Liste, an oder aus.
+Some	Einige
+As if its code had been entered.	Als wäre sein Code eingegeben worden.
+Credits	Mitwirkende
+See who made this game.	Sehen Sie, wer dieses Spiel gemacht hat.
+Master Volume	Gesamtlautstärke
+Master volume of the game.	Gesamtlautstärke des Spiels.
+Exit	Beenden
+Close the game.	Spiel beenden.
+Back	Zurück
+PRESS ENTER	ENTER DRÜCKEN
+PRESS START	START DRÜCKEN
+SAVED	GESPEICHERT
+The name is set.	Der Name ist gesetzt.
+The name stays as it was.	Der Name bleibt, wie er war.
+Type a new name, Backspace edits this one. Enter sets it, Esc leaves it.	Neuen Namen eingeben, Rücktaste ändert diesen. Enter übernimmt, Esc bricht ab.
+On	An
+Off	Aus
+Selected	Gewählt
+Current	Aktuell
+Maximum	Maximal
+Ultra	Ultra
+Original	Original
+Fullscreen	Vollbild
+Windowed	Fenster
+First	Erstes
+Second	Zweites
+Auto	Auto
+Cancel	Abbrechen
+Delete?	Löschen?
+Press...	Drücken...
+The game's texts and speech in this language.	Texte und Sprachausgabe des Spiels in dieser Sprache.
+Profile	Profil
+New Profile	Neues Profil
+Delete Profile	Profil löschen
+A profile needs a name.	Ein Profil braucht einen Namen.
+There is a profile of that name.	Ein Profil dieses Namens gibt es schon.
+That name cannot be a folder.	Dieser Name kann kein Ordner sein.
+Select it twice to delete this profile, its save and its controls.	Zweimal wählen, um dieses Profil mit Spielstand und Steuerung zu löschen.
+Play as this profile.	Mit diesem Profil spielen.
+This is the profile in use.	Dieses Profil ist in Gebrauch.
+The profile in use cannot be deleted.	Das Profil in Gebrauch kann nicht gelöscht werden.
+Select it again to delete it for good.	Noch einmal wählen, um es endgültig zu löschen.
+Delete nothing.	Nichts löschen.
+Select, then type its name. With a gamepad it gets a number.	Wählen, dann den Namen eingeben. Mit dem Gamepad gibt es eine Nummer.
+Type the name. Enter makes it, Esc leaves it.	Namen eingeben. Enter legt an, Esc bricht ab.
+Choose one to delete.	Eines zum Löschen wählen.
+Resolution	Auflösung
+The window, the screen's resolution and the render scale.	Fenster, Bildschirmauflösung und Renderskalierung.
+Frame Rate	Bildrate
+The PS2's was 30. Above 60 the game still runs at 60, with pictures drawn in between.	Die PS2 hatte 30. Über 60 läuft das Spiel weiter mit 60, dazwischen werden Bilder gezeichnet.
+Draw Distance	Sichtweite
+How far away scenery still shows. Original: as on the PS2. Advanced: twice as far. High: four times. Maximum: six times.	Wie weit die Umgebung sichtbar bleibt. Original: wie auf der PS2. Erweitert: doppelt so weit. Hoch: viermal. Maximal: sechsmal.
+Level of Detail	Detailstufe
+Maximum: scenery and cars always at their most detailed models. Original: as on the PS2.	Maximal: Umgebung und Autos immer mit ihren detailliertesten Modellen. Original: wie auf der PS2.
+Reflections	Spiegelungen
+Shadows	Schatten
+The cars' shadows. High: the body's own outline, lying on whatever is under it. Maximum: finer still.	Die Schatten der Autos. Hoch: der Umriss der Karosserie selbst, auf allem, was darunter liegt. Maximum: noch feiner.
+Particles	Partikel
+Smoke, sparks and dust. Advanced: the same, with soft edges.	Rauch, Funken und Staub. Erweitert: dieselben, mit weichen Rändern.
+High	Hoch
+The reflections on the cars. Advanced: new every frame. High: new every frame, at twice the resolution.	Die Spiegelungen auf den Autos. Erweitert: in jedem Bild neu. Hoch: in jedem Bild neu, in doppelter Auflösung.
+Show FPS	FPS anzeigen
+Frames per second in the corner of the picture.	Bilder pro Sekunde in der Bildecke.
+Advanced	Erweitert
+Anti-aliasing, texture filtering, brightness, contrast and gamma.	Kantenglättung, Texturfilter, Helligkeit, Kontrast und Gamma.
+Window	Fenster
+Window or borderless fullscreen. Alt+Enter switches too.	Fenster oder randloses Vollbild. Auch Alt+Enter schaltet um.
+The picture's size. Fullscreen stretches it to the monitor.	Größe des Bildes. Vollbild streckt es auf den Monitor.
+The race's picture: as wide as the resolution, or 4:3. The menus stay 4:3.	Das Rennbild: so breit wie die Auflösung oder 4:3. Die Menüs bleiben 4:3.
+A 4:3 resolution shows the race in 4:3. A wider one has the wider picture.	Eine 4:3-Auflösung zeigt das Rennen in 4:3. Eine breitere hat das breite Bild.
+Render Scale	Renderskalierung
+How finely the picture is drawn: 100% is the resolution itself.	Wie fein das Bild berechnet wird: 100% ist die Auflösung selbst.
+Aspect Ratio	Seitenverhältnis
+On: each frame waits for the screen, no tearing. Off: shown at once.	An: Jedes Bild wartet auf den Bildschirm, kein Zerreißen. Aus: sofort gezeigt.
+Anti-Aliasing	Kantenglättung
+Smoother edges.	Glattere Kanten.
+Anisotropic Filtering	Anisotrope Filterung
+Sharper textures far away, on everything in the world.	Schärfere Texturen in der Ferne, auf allem in der Welt.
+This graphics card has no anti-aliasing for the game.	Diese Grafikkarte hat keine Kantenglättung für das Spiel.
+This graphics card has no anisotropic filtering.	Diese Grafikkarte hat keine anisotrope Filterung.
+Brightness	Helligkeit
+Lighter or darker, all over.	Überall heller oder dunkler.
+Contrast	Kontrast
+The difference between light and dark.	Der Unterschied zwischen hell und dunkel.
+Gamma	Gamma
+Above 1.00 the dark parts get lighter.	Über 1.00 werden dunkle Bereiche heller.
+Ambient Occlusion	Umgebungsverdeckung
+Soft shading where surfaces meet: under cars, by walls and kerbs.	Weiche Schattierung, wo Flächen aufeinandertreffen: unter Autos, an Mauern und Bordsteinen.
+Unlimited	Unbegrenzt
+Monitor	Monitor
+The screen the game is shown on.	Der Bildschirm, auf dem das Spiel gezeigt wird.
+Automatic	Automatisch
+Select GPU	Grafikkarte wählen
+Which graphics card draws the game. Changing it restarts the game.	Welche Grafikkarte das Spiel zeichnet. Ein Wechsel startet das Spiel neu.
+The game chooses: a separate graphics card before a built-in one.	Das Spiel wählt: eine eigene Grafikkarte vor einer eingebauten.
+Draw the game with this graphics card.	Das Spiel mit dieser Grafikkarte zeichnen.
+The game will restart to draw with another graphics card. Continue?	Das Spiel startet neu, um eine andere Grafikkarte zu verwenden. Fortfahren?
+This is the choice in use.	Das ist die aktuelle Wahl.
+In Use	In Gebrauch
+Dithering	Dithering
+Smooth gradients without colour steps.	Weiche Verläufe ohne Farbstufen.
+Low	Niedrig
+Defaults	Standard
+Brightness, contrast and gamma as they were.	Helligkeit, Kontrast und Gamma wie zuvor.
+The picture is back to the defaults.	Das Bild ist wieder auf Standard.
+Keyboard	Tastatur
+The keys for driving. In menus: arrows, Enter, Esc.	Die Tasten zum Fahren. In Menüs: Pfeile, Enter, Esc.
+Gamepad	Gamepad
+The buttons for driving, the stick and vibration.	Die Knöpfe zum Fahren, der Stick und die Vibration.
+Player 2	Spieler 2
+What the second player drives with in a two-player race.	Womit der zweite Spieler im Rennen zu zweit fährt.
+Second: the second gamepad or half the keyboard. First: the first one.	Zweites: das zweite Gamepad oder die halbe Tastatur. Erstes: das erste.
+Player 2's keys, when the keyboard is shared.	Die Tasten von Spieler 2 bei geteilter Tastatur.
+Player 2 Keyboard	Tastatur Spieler 2
+Layouts	Belegungen
+The game's own layouts: what each of the PS2's buttons does in a race.	Die Belegungen des Spiels: was jede PS2-Taste im Rennen tut.
+Buttons	Knöpfe
+Which of the pad's buttons is which of the PS2's. In menus: A, B back, Y help.	Welcher Gamepad-Knopf welcher PS2-Taste entspricht. In Menüs: A, B zurück, Y Hilfe.
+Stick Dead Zone	Stick-Totzone
+How far the left stick moves before the car steers.	Wie weit sich der linke Stick bewegt, bevor das Auto lenkt.
+Steering	Lenkung
+Above 100%, the car turns sharper for a small move of the stick.	Über 100 % lenkt das Auto bei kleiner Stickbewegung stärker.
+Vibration	Vibration
+Vibration of the gamepad.	Vibration des Gamepads.
+Button Icons	Tastensymbole
+Which buttons the game shows, and the menus' layout that goes with them.	Welche Knöpfe das Spiel zeigt, mit der passenden Menübelegung.
+Gamepad Buttons	Gamepad-Knöpfe
+Reset to Default	Standard wiederherstellen
+Back to the defaults.	Zurück zum Standard.
+Put these keys back as they were.	Diese Tasten zurücksetzen.
+Put the gamepad's buttons back as they were.	Die Gamepad-Knöpfe zurücksetzen.
+Put the gamepad back as it was.	Das Gamepad zurücksetzen.
+The gamepad is back to the defaults.	Das Gamepad ist wieder auf Standard.
+Cancelled.	Abgebrochen.
+Done. Select a row to bind it again.	Fertig. Eine Zeile wählen, um sie neu zu belegen.
+Select, then press the gamepad button. Esc cancels.	Wählen, dann den Gamepad-Knopf drücken. Esc bricht ab.
+Select, then press the key. Esc cancels.	Wählen, dann die Taste drücken. Esc bricht ab.
+Press a gamepad button. Esc cancels.	Einen Gamepad-Knopf drücken. Esc bricht ab.
+Press a key. Esc cancels.	Eine Taste drücken. Esc bricht ab.
+Cycle HUD	HUD wechseln
+Steer Left	Links lenken
+Steer Right	Rechts lenken
+Accelerate	Gas geben
+Brake / Reverse	Bremsen / Rückwärts
+Horn / Siren	Hupe / Sirene
+Change View	Ansicht wechseln
+Look Back	Zurückschauen
+Handbrake	Handbremse
+Shift Down / Freeze	Runterschalten / Anhalten
+Shift Up / Zoom	Hochschalten / Zoom
+Speed Boost	Turbo
+Pause	Pause
+Reset Car	Auto zurücksetzen
+Up	Oben
+Down	Unten
+Left	Links
+Right	Rechts
+Enter	Enter
+Space	Leertaste
+Esc	Esc
+Backspace	Rücktaste
+Delete	Entf
+Insert	Einfg
+Home	Pos1
+End	Ende
+Page Up	Bild auf
+Page Down	Bild ab
+Caps Lock	Feststell
+Shift	Umschalt
+L Shift	Umschalt L
+R Shift	Umschalt R
+L Ctrl	Strg L
+R Ctrl	Strg R
+Ctrl	Strg
+L Alt	Alt L
+R Alt	Alt Gr
+Pad Up	Steuerkreuz oben
+Pad Down	Steuerkreuz unten
+Pad Left	Steuerkreuz links
+Pad Right	Steuerkreuz rechts
+L Stick	Stick L
+R Stick	Stick R
+#100004	HUD
+#150004	Spielstand
+#151001	Spieleinstellungen werden geladen.
+#151003	Keine gespeicherten Spieleinstellungen gefunden.
+#151004	Spieleinstellungen werden gespeichert.@Spiel nicht beenden.
+#151006	Der Speicherordner lässt sich nicht öffnen.@ @Erneut versuchen?
+#151007	Der Speicherordner ist beschädigt. Neu anlegen?
+#151008	Speicherordner wird angelegt...
+#151009	Der Speicherordner wurde angelegt.
+#151010	Der Speicherordner lässt sich nicht anlegen.@ @Erneut versuchen?
+#151011	Nicht genug Speicherplatz zum Speichern. Erneut versuchen?
+#151012	Das Spiel konnte nicht gespeichert werden.@Erneut versuchen?
+#151013	Gespeicherte Spiele werden gesucht...
+#151014	Ein neuer Speicherordner wurde angelegt.
+#151015	Der Speicherordner lässt sich nicht öffnen.@ Erneut laden?
+#151016	Der Speicherordner ist nicht nutzbar.
+#151017	Der Speicherordner lässt sich nicht öffnen.
+#151018	Der Spielstand konnte nicht geladen werden.@Erneut versuchen?
+#151020	Spielstand@überschreiben?
+#151022	Die aktuellen Einstellungen werden durch den Spielstand ersetzt. Fortfahren?
+#151023	Spielstand anlegen?
+#151024	Der Spielstand konnte nicht geladen werden.
+#151025	Der Speicherordner lässt sich nicht öffnen.
+#151027	Der Speicherordner lässt sich nicht öffnen. Erneut versuchen?
+#151101	Der Speicherordner ist beschädigt.
+#152001	Speicherordner wird angelegt...
+#300350	\x81 drücken, um das Auto zurückzusetzen.
+#800023	\x82 \x83 Auto neigen
+#800024	\x84 \x85 Auto drehen
+#800026	\x8b \x8d Kamera zoomen
+#800070	\x82 \x83 Option wählen
+#800071	\x86 \x80 Option ausführen
+#802004	\x82 \x83 Auto neigen
+#802005	\x84 \x85 Auto drehen
+#802006	\x82 \x83 \x84 \x85 Drehen und neigen
+#802007	\x8b \x8d Kamera zoomen
+#802010	\x82 \x83 Auto neigen
+#802011	\x84 \x85 Auto drehen
+#802012	\x82 \x83 \x84 \x85 Drehen und neigen
+#802013	\x8b \x8d Kamera zoomen
+#900005	Bitte ein Gamepad@für Spieler %d@anschließen.
+#900011	Bitte ein Gamepad anschließen.
+#940001	\x80 drücken, um an diesem Event teilzunehmen.
+Select, then press the key for it. Esc cancels.	Wählen, dann die Taste drücken. Esc bricht ab.
+Zone Freeze / Helicopter	Zone einfrieren / Helikopter
+Zone Zoom / Road Block	Zone zoomen / Straßensperre
+Racer: Zone Freeze. Cop: call the helicopter.	Fahrer: Zone einfrieren. Polizist: Helikopter.
+Racer: Zone Zoom. Cop: ask for a road block.	Fahrer: Zone zoomen. Polizist: Straßensperre.
+Horn. Police car: siren. Cop: next suspect.	Hupe. Polizei: Sirene, nächster Verdächtiger.
+The cop's turbo: a few seconds faster.	Polizei-Turbo: ein paar Sekunden schneller.
+Select, then type its name. A gamepad gets the letter grid.	Wählen, dann den Namen eingeben. Mit Gamepad erscheint das Buchstabenfeld.
+Capitals	Großbuchstaben
+Delete the profile %s? Its save and its controls will be gone.	Profil %s löschen? Spielstand und Steuerung gehen verloren.
+The profile is made. Select it to play as it.	Das Profil ist angelegt. Wählen Sie es, um damit zu spielen.
+Antialiasing	Kantenglättung
+Smoother edges: off, MSAA or SMAA.	Glattere Kanten: aus, MSAA oder SMAA.
+Off, MSAA (the scene drawn in samples) or SMAA (the picture's edges smoothed).	Aus, MSAA (die Szene in Samples gezeichnet) oder SMAA (die Kanten des Bildes geglättet).
+Quality	Qualität
+MSAA: samples a pixel. SMAA: how far it looks along an edge.	MSAA: Samples pro Pixel. SMAA: wie weit es an einer Kante entlang sucht.
+This graphics card has no more samples for the game.	Diese Grafikkarte hat nicht mehr Samples für das Spiel.
+The buttons for driving and the stick.	Die Knöpfe zum Fahren und der Stick.
+The gamepad's layouts, A to D: what each button does in a race.	Die Belegungen des Gamepads, A bis D: was jeder Knopf im Rennen tut.
+Leave the game?	Spiel beenden?
+Pick the letters. The last key of the grid makes it.	Buchstaben wählen. Die letzte Taste des Feldes übernimmt.
+Type the new name. Enter sets it, Esc leaves it.	Neuen Namen eingeben. Enter übernimmt, Esc bricht ab.

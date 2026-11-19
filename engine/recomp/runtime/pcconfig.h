@@ -1,0 +1,103 @@
+// The port's settings, hp2.ini next to the exe (pcconfig.cpp). Created with defaults on the
+// first run; the game's menus (pcsettings.cpp) change them and save. Environment variables
+// the port already has (HP2_GSBACKEND, HP2_GSSCALE, HP2_NOSOUND ...) win over the file.
+#pragma once
+#include <string>
+
+// The PS2 buttons, in this order (the pad word's bit order is in window.cpp). key and pad say which
+// keys and gamepad buttons give them while driving; the menus have fixed ones (pc_menu_key, pc_menu_pad).
+enum PcButton {
+    PCB_UP, PCB_DOWN, PCB_LEFT, PCB_RIGHT, PCB_CROSS, PCB_SQUARE, PCB_CIRCLE, PCB_TRIANGLE,
+    PCB_L1, PCB_R1, PCB_L2, PCB_R2, PCB_R3, PCB_START, PCB_SELECT, PCB_COUNT
+};
+
+struct PcConfig {
+    int fullscreen = 0;         // borderless fullscreen
+    int aspect = 0;             // the race's picture: 0 4:3, else as wide as the resolution (16:10 or 16:9: pc_aspect). The menus stay 4:3
+    int fs_w = 0, fs_h = 0;     // fullscreen: the picture's size, stretched to the monitor; 0: the monitor's own
+    int render_scale = 100;     // percent of the resolution the picture is drawn at, 20 to 200 in steps of 20
+    int aa_mode = 0;            // anti-aliasing: 0 off, 1 MSAA (the scene in samples), 2 SMAA (the finished picture's edges)
+    int aa_level = 4;           // 2 or 4: MSAA's samples, SMAA's quality
+    int msaa() const { return aa_mode == 1 ? aa_level : 0; }
+    int aniso = 0;              // anisotropic filtering: 0 off (the GS's own sampling), 2, 4, 8, 16
+    // The port's own effects on a race's 3D picture (native_extra.frag); the PS2 had none of them, so off as they come
+    int ao = 0;                 // Ambient Occlusion in a race: 0 off, 1 on (native.cpp, ao_end)
+    int ao_reach = 150;         // how far a surface is shaded by what stands by it, centimetres (hp2.ini only)
+    int ao_strength = 100;      // and how dark, percent (hp2.ini only)
+    int shadow_softness = 100;  // the cars' shadows at High and up: how wide the soft edge gets, percent (hp2.ini only)
+    int monitor = 0;            // the screen the game is shown on: 0 where the window is, 1 and up that screen (window.cpp)
+    char gpu[128] = {};         // the graphics card that draws the game, by its name; empty: the game's choice (native_vk.cpp)
+    int deband = 0;             // dithering against the steps of smooth gradients: 0 off, 1 on. On every picture, the menus' too
+    int brightness = 0;         // percent added, -50..50
+    int contrast = 100;         // percent, 50..150
+    int gamma = 100;            // percent, 50..200: 100 changes nothing, above it lighter
+    int frame_rate = 30;        // the race's, 30 or 60; the menus have 60
+    int pictures = 0;           // above 60: with frame_rate 60, so many pictures a second, drawn between the race's frames (native.cpp)
+    int vsync = 1;              // the picture waits for the screen's refresh (no tearing); 0: shown at once
+    int draw_distance = 200;    // percent, 100..600: 100 is the PS2's (the menu: Original 100, Advanced 200, High 400, Maximum 600)
+    char last_profile[32] = {}; // listed first on the profiles' screen
+    int show_fps = 0;
+    int cheat_menu = 0;         // Extras, Cheat Menu: F8 in the menus opens the cheats' pages, and what is on there is on in the game
+    unsigned char cheats[96] = {};      // by the entry of the game's table of codes (EasterEggs): 1 on
+    int debug_menu = 0;         // Extras, DEBUG.not.pretty: the developers' Debug item shows in the pause menu (pcmenu.cpp)
+    char language[16] = "ENGLISH";  // a key of pc_languages() (pclang.h)
+    bool ask_language = true;   // hp2.ini has no language yet: the very first start shows the game's own choice of language (pclang.cpp)
+    int log = 1;                // speed.log is written (1), or nothing is (0): hp2.ini has it as on / off
+    int shadows = 0;            // the cars' shadows: 0 the PS2's (the game's polygons), 1 high (the body's own outline from the sun, laid by
+                                // the picture's depth on whatever is under it; in the mirror and far off too), 2 maximum: that at twice
+                                // the map's resolution (native.cpp, "Shadows")
+    int particles = 0;          // the smoke, sparks and dust: 0 original (the game's own sprites, made by its own code as on the PS2),
+                                // 1 advanced (the same particles, each sprite at its exact place and with soft edges): native.cpp
+    int reflections = 0;        // the cars' reflections in a race: 0 the PS2's (views of 64 pixels, a few of the six a frame), 1 advanced:
+                                // the PS2's resolution, all six views every frame; 2 high: twice the resolution, all six every frame
+    int max_detail = 1;         // 1: scenery, cars and tyres at their best models whatever the size; 0: the game's choice by size
+    int volume = 100;           // percent
+    int key[PCB_COUNT][2] = {}; // virtual-key codes, 0 = none
+    int key2[PCB_COUNT][2] = {};    // player 2's, when the keyboard is shared in two (window_pad)
+    // The keys are actions, named by what the button does in the game's layout A (pc_button_action); in another layout of the gamepad's
+    // the key keeps its action and presses the button that has it there (pc_layout_button). Two more, which on a pad are two buttons
+    // together: the zone cameras, 0 Zone Freeze (Triangle + L2), 1 Zone Zoom (Triangle + R2).
+    int key_zone[2][2] = {}, key2_zone[2][2] = {};
+    int player2 = 0;            // 0: the second gamepad, else half of the keyboard. 1: the first gamepad, player 1 has the keyboard
+    int pad[PCB_COUNT] = {};    // XInput button masks, 0 = none
+    int pad_deadzone = 24;      // the left stick's dead zone, percent
+    int pad_steering = 100;     // steering sensitivity, percent: above 100 more of it near the center
+    int pad_icons = 0;          // 0 by the pad, 1 Xbox, 2 PlayStation: its menu layout goes with them
+    int win_w = 960, win_h = 720;   // the window's picture, in pixels
+    PcConfig();
+    void default_keys();
+    void default_keys2();
+    void default_pad();
+};
+
+extern PcConfig g_cfg;
+extern int g_layout_playstation;    // the layouts' screen shows PlayStation's buttons: unless an Xbox pad is there or chosen
+extern int g_pad_playstation;   // the pad in use has PlayStation's buttons (window_pad keeps it)
+extern int g_pad_steering_now;  // the sensitivity now: pad_steering while driving, else 100
+// The race's aspect as it is drawn: 4:3, or the shape of the resolution (window_view_size): a 16:9 resolution has 16:9 and 4:3, a
+// 16:10 one 16:10 and 4:3, a 4:3 one 4:3 alone (the user, 2026-11-14: no 16:10 picture in 1920x1080). pc_aspect_limit is that shape.
+// How many steps of the world a second the race is asked for: 30 as on the PS2, or 60 (Frame Rate 60, and 120, which is 60 with a
+// picture drawn between each two). Everything that makes the game behave at more steps a second as it did at 30 (whose turn it
+// is to think, the windows of the AI drivers' averages, the steering's scale, the animations between frames) goes by this number
+// and by the world's clock, never by a setting's name: a new rate has them all without being listed anywhere (the user,
+// 2026-11-14: "all the physics fixes for 60 must work at 120 and at whatever comes later").
+inline int pc_world_rate() { return g_cfg.frame_rate >= 60 ? 60 : 30; }
+// what Frame Rate shows: 30, 60, or the pictures a second above that
+inline int pc_picture_rate() { return g_cfg.frame_rate >= 60 ? (g_cfg.pictures > 60 ? g_cfg.pictures : 60) : 30; }
+
+int pc_aspect();
+int pc_aspect_limit();
+void pc_config_init();          // read hp2.ini (HP2_INI=<path> names another file); the main program only
+void pc_config_save();
+bool pc_config_log();           // hp2.ini's log key alone, before anything else is read: whether there is to be a log at all
+// the profile's file of controls: its values, or with none the defaults (fresh) or what is set now; each save writes it
+void pc_config_use_profile(const std::string &controls_path, bool fresh);
+const char *pc_button_name(int b);          // "Cross", the name in hp2.ini
+const char *pc_button_action(int b);        // "Accelerate", what it does while driving
+std::string pc_key_name(int vk);            // "Space", "A"
+const char *pc_pad_name(int mask);          // "A", "LB", "Cross": the first button of a mask
+std::string pc_pad_names(int mask);         // "A/RT": all of them
+int pc_menu_key(int b);                     // the fixed virtual key of a button in the menus, 0: none
+int pc_menu_pad(int b);                     // and the XInput mask
+int pc_menu_key_split(int player, int b);   // that key on a screen where two players choose at once
+const int PC_BACK_KEY = 0x1B;               // VK_ESCAPE: Triangle in the menus, Start in a race

@@ -1,0 +1,57 @@
+# The game's data as files
+
+`recompwin/data/` holds what `ZZDATA.BIN` holds, one file each. `disc.cpp` builds `ZDIR.BIN` and `ZZDATA.BIN` from it at start, so the game's code is untouched and sees the archive it knows. Without `data/index.txt` the game reads the two files in `NFSHP2/` as before.
+
+```
+python tools/recomp/unpack_data.py       data/ out of NFSHP2/; over an existing data/ it moves the files to the layout
+python tools/recomp/export_textures.py   data/textures/, 30 s
+python tools/recomp/export_text.py       data/text/
+```
+
+`index.txt` keeps ZDIR's order, `<hash> <path>`. The game goes by the hash, so a file's name and folder here are free: `unpack_data.py` sets them, and moving a file only takes changing its line. Sizes are read when the game starts.
+
+| Folder | Files | Size | What |
+|---|---:|---:|---|
+| `SOUND/` | 70 | 1.8 GB | sound banks `.MSB`/`.MSH`, music `.JBC`, speech `.PCK`, `.EVT`, engine tables `.CTB`/`.LTB`, `.sndbank` |
+| `MOVIES/` | 21 | 650 MB | `.AVI`, MV30; four names unknown in `unnamed/`, one of them MVDV, which the game rejects |
+| `TRACKS/` | 120 | 584 MB | `TRACKB*.BUN` the track, `TEX*TRACK.tex`, `TEX*LOCATION.tex`, empty `TRACKA*.BUN`, marker notes `.txt` |
+| `FRONTEND/` | 3 | 40 MB | `FRONTB.BUN` the menus, `TSELECT.tex` |
+| `CARS/` | 48 | 41 MB | `<car>/GEOMETRY.geo`, `TEXTURES.tex` |
+| `GLOBAL/` | 9 | 6 MB | `GLOBALB`, `INGAMEB`, `PRERACEANIM`, `HUDTEX.tex`, `DYNTEX.tex`, `DRIVTEX.tex` |
+| `REPLAY/` | 36 | 4 MB | demo-mode replays `.replay`; those with no known name in `DEMO/`, by the author written in them |
+| `NIS/`, `MARKERS/`, `LANGUAGES/` | | 2 MB | cutscenes `.nis` + `.CAM`, `.markers`, string tables `.lang` |
+
+Ours, which the game does not read: `textures/`, `text/` (made by the Python tools or `HP2_EXPORTS=<data folder>`; since 2026-11-13 the install makes neither, nor `replace/`). Not read by the game, as far as is known: `KEY.TXT`, a line of hex digits between two x; `NFS.TAG` holds "Hello." and the name fits its hash, as does `NG2.TAG`. Names are not read from anywhere: `index.txt` is what matters.
+
+Extensions of ours, all the game's `.BIN`: `.tex` a texture pack, `.geo` geometry, `.lang` strings, `.replay`, `.nis`, `.markers`, `.sndbank`. `.BUN` is a file of chunks. The disc keeps 81 of them compressed (`.LZC`, a COMP container: the tracks, the cars' geometry, `FRONTB`, `GLOBALB`, `INGAMEB`, `PRERACEANIM`); the installer writes them unpacked, as `.BUN` or `.geo`, under the compressed file's hash, and the game takes them as they are (2026-11-11; installs of 0.12 and before have the `.LZC` files and an `unused/` folder with the disc's own plain copies of 58 of them, and run as they are). The disc's plain copy and the unpacked file are the same bytes, so the copy's line of `index.txt` names the same file: 405 lines, 344 files.
+
+Some names stand twice in ZDIR with one hash (`CARS/TEXTURES`, `GLOBAL/HUDTEX`, `SOUND/SPEECH/EVENTS.EVT`) and share one file here: the check below shows the two copies are the same bytes.
+
+## Text
+
+`LANGUAGES/FE_<language>.lang`, chunk 0x39000: a header, then two tables of `{s32 key, u32 offset}` into one pool of text, one by LanguageID and one by the hash of the English text. Six languages, and two that are tools: `FE_ID` has each ID's own number, `FE_LONGEST` the longest translation of each. 2437 strings each. `data/text/<language>.txt` and `all.tsv` are for reading; the game goes on reading the `.lang` files.
+
+## Textures
+
+`data/textures/<file>/<NAME>.png` are all of them, a picture found in several files once; `data/textures/index.csv` says where each is used. The alpha is doubled, as a PNG is read by everyone else: 255 is the GS's 0x80.
+
+Since 2026-11-13 the game looks for no replacements by itself and the install makes no `data/replace/` (the user: a tool for the assets comes later). The mechanism is still in the program, behind `HP2_REPLACE=<folder>`. A PNG in that folder (any subfolder) takes a texture's place:
+
+- `<NAME>.png` wherever that name is used; `<NAME>@<crc>.png` for one exact texture, the crc from `index.csv`, when one name has several pictures. The name is checked first with the crc.
+- Its size is the texture's times a whole number. Larger ones go through the GPU's filter, since the GS's levels would be wrong for them, and get a new chain of levels if the texture had any.
+- An unedited export changes nothing, the game's own levels stay.
+- `MOVIE_*` are frames of the movies and are not looked up.
+- Textures the game changes as it runs (`WATER`, `WATERC`, `CREEKBED`, `BUTTONSOUT`, `TRACK_BARRIER_NEON`): by name only, their crc moves.
+
+## Checks
+
+- `HP2_DISCCHECK=1`: the built archive against the real two files, then exits. 2026-11-05, in this layout: ZDIR the same, ZZDATA 3116437504 bytes, 0 differ.
+- `HP2_FILELOG=<file>`: each file of `data/` at its first read, with the time.
+- `HP2_TEXCHECK=1` with `export_textures.py --replace-all` into a folder named by `HP2_REPLACE` (then: in `data/replace/`): each texture the game uses against its PNG. 2026-11-05, menus and a race, 200+ textures, 0 differ.
+
+## Not known yet
+
+- Whether a file may change size. The decompiled loading code (`src/bFileE.cpp`, `src/ResourceLoader.cpp`) has no reference by sector, it takes each file's place from ZDIR, which `disc.cpp` builds from the sizes now. That is the EE's code only: the contents of the game's files and the IRX were not searched for sector numbers, and no file of another size has been tried in the game. A texture table has to fit in a file's first 0x20000 bytes.
+- A file not starting with `COMP` is taken as it is under a `.LZC` name: `ResourceFile::LoadResourceIfFileTransferFinished` (`0x1994f0`) unpacks only on that mark. Tried on all five discs, 2026-11-11: this is how every install is laid out now.
+- The formats of `SOUND/`, of geometry and of tracks are not exported.
+- 32 files keep their hash for a name: 25 replays, 4 movies, one sound bank (2 files), one table of the speech's events.

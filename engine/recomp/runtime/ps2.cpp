@@ -1,0 +1,707 @@
+// Host side of the recompiled EE: memory, ELF loading, BIOS syscalls,
+// hardware register access and the indirect-call dispatcher.
+#include "ps2.h"
+#include "stall.h"
+#include "phase.h"
+#include "cores.h"
+#include "hw.h"
+#include "pcconfig.h"
+#include "disc.h"
+#include "setup_iso.h"
+#include "setup.h"
+#include "host.h"
+#include "layouts_patch.h"
+
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <algorithm>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <vector>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#endif
+
+#ifdef HP2_MEM4G
+// An access of the game's code to an address that is not memory, from code that reaches memory with no test: an instruction that
+// recomp/runtime/slow_sites.txt should list. Said before the program dies of it.
+static LONG CALLBACK mem_stray(EXCEPTION_POINTERS *e)
+{
+    const EXCEPTION_RECORD *r = e->ExceptionRecord;
+    if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || r->NumberParameters < 2) return EXCEPTION_CONTINUE_SEARCH;
+    const uintptr_t at = (uintptr_t)r->ExceptionInformation[1], base = (uintptr_t)g_ram;
+    if (at < base || at - base >= 0x100010000ull) return EXCEPTION_CONTINUE_SEARCH;
+    static bool told;
+    if (!told) {
+        told = true;
+        char text[256];
+        snprintf(text, sizeof text, "memory: the game's code %s %08x, which is not memory, at image + %llx: an instruction for slow_sites.txt",
+                 r->ExceptionInformation[0] == 1 ? "wrote to" : "read", (unsigned)(at - base),
+                 (unsigned long long)((uintptr_t)r->ExceptionAddress - (uintptr_t)GetModuleHandleA(nullptr)));
+        fprintf(stderr, "%s\n", text);
+        fflush(stderr);
+        host_fatal(text);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// The 4 GB of the game's addresses (ps2.h). The array is in the image up to guest 0x1200FFFF; of it the hardware's registers lose
+// their access (the VU's memory among them keeps it). What follows the image is reserved up to the end, the scratchpad given memory.
+void mem_reserve()
+{
+    DWORD old;
+    bool ok = ((uintptr_t)g_ram & 4095) == 0;
+    ok = ok && VirtualProtect(g_ram + 0x10000000u, 0x01000000, PAGE_NOACCESS, &old);
+    ok = ok && VirtualProtect(g_ram + 0x11010000u, 0x01000000, PAGE_NOACCESS, &old);
+    const u8 *image = (const u8 *)GetModuleHandleA(nullptr);
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(image + ((const IMAGE_DOS_HEADER *)image)->e_lfanew);
+    const uintptr_t from = ((uintptr_t)image + nt->OptionalHeader.SizeOfImage + 0xFFFF) & ~(uintptr_t)0xFFFF;
+    const uintptr_t end = (uintptr_t)g_ram + 0x100010000ull;    // and a little past the end, for an access that begins at the last address
+    ok = ok && from <= (uintptr_t)g_ram + 0x20000000u;          // nothing of the image where the mirrors and the scratchpad are
+    ok = ok && VirtualAlloc((void *)from, end - from, MEM_RESERVE, PAGE_NOACCESS) != nullptr;
+    ok = ok && VirtualAlloc(g_spr, 0x10000, MEM_COMMIT, PAGE_READWRITE) != nullptr;
+    if (!ok) {
+        MessageBoxA(nullptr, "The game could not reserve its memory (4 GB of address space after the program).", "NFS Hot Pursuit 2", MB_ICONERROR);
+        ExitProcess(1);
+    }
+    AddVectoredExceptionHandler(0, mem_stray);
+}
+
+#else
+alignas(4096) u8 g_ram[0x10000000 + 64];    // on a page of its own from the start: memwatch.cpp protects its pages
+alignas(64) u8 g_spr[0x4000 + 64];
+alignas(64) u8 g_vumem[0x10000 + 64];
+#endif
+
+// gen.py --sites: an instruction of the game's whose access was not in the block or the scratchpad, each once to HP2_SITELOG
+void mem_site(u32 pc)
+{
+    static u8 seen[0x200000 / 4];                       // the program is 0x100000 to 0x2D...: one byte an instruction
+    const u32 i = (pc - 0x100000) >> 2;
+    if (i >= sizeof seen || seen[i]) return;
+    seen[i] = 1;
+    static FILE *f = getenv("HP2_SITELOG") ? fopen(getenv("HP2_SITELOG"), "a") : nullptr;
+    if (f) fprintf(f, "%x\n", pc), fflush(f);
+}
+u8 *g_ext = g_ram + EXT_BASE;
+uint8_t g_ee_booth16[8192];     // eefloat.h
+EeDivEntry g_ee_div_cache[4096];
+EeSqrtEntry g_ee_sqrt_cache[4096];
+uint8_t g_ee_recip_up[1 << 20], g_ee_sqrt_up[1 << 21];
+std::atomic<bool> g_ee_tables;
+u32 g_ext_size;
+
+// the memory past 32 MB (ps2.h): part of g_ram's block, so there is nothing to reserve; g_ext_size is where the part in use ends (what
+// the DMA and the native memory helpers take as this memory)
+bool ext_commit(u32 off, u32 bytes)
+{
+    u32 from = off & ~0xFFFFu, to = (off + bytes + 0xFFFF) & ~0xFFFFu;
+    if (to > EXT_MAX || to <= from) return false;
+    if (to > g_ext_size) g_ext_size = to;
+    return true;
+}
+
+// host()'s rare cases: the mirrors of the block and the VU's memory
+u8 *host_slow(u32 a)
+{
+    const u32 top = a >> 28;
+    if (top == 7) return nullptr;
+    const u32 p = (top == 2 || top == 3) ? (a & 0x01FFFFFF) : (a & 0x1FFFFFFF);
+    if (p < 0x02000000) {
+        // uncached views of the PC's memory, else the 32 MB's mirror
+        if (top == 2 || top == 3) {
+            const u32 e = (a & 0x0FFFFFFF) - EXT_BASE;
+            if (e < g_ext_size) return g_ext + e;
+        }
+        return g_ram + p;
+    }
+    if (p - EXT_BASE < g_ext_size) return g_ext + (p - EXT_BASE);
+    if (p - 0x11000000u < 0x10000u) return g_vumem + (p - 0x11000000u);
+    return nullptr;
+}
+
+// what host() leaves: a mirror or the VU's memory by host_slow, else I/O
+u64 mem_read_slow(u32 a, int size)
+{
+    if (const u8 *p = host_slow(a)) {
+        u64 v = 0;
+        memcpy(&v, p, (size_t)size);
+        return v;
+    }
+    return io_read(a, size);
+}
+
+void mem_write_slow(u32 a, u64 v, int size)
+{
+    if (u8 *p = host_slow(a)) {
+        memcpy(p, &v, (size_t)size);
+        return;
+    }
+    io_write(a, v, size);
+}
+
+static FILE *g_log = stderr;
+FILE *g_hle_log = stderr;
+static Ctx *g_ctx;
+static std::map<u32, int> g_io_seen;
+
+void profile_start();                       // profile.cpp
+std::atomic<int> g_stall_cd_us, g_stall_rpc_us;         // stall.h
+
+[[noreturn]] static void die(const char *what, Ctx &c, u32 pc)
+{
+    char msg[128];
+    snprintf(msg, sizeof msg, "FATAL: %s at pc=%08x ra=%08x sp=%08x", what, pc, c.r[31].w[0], c.r[29].w[0]);
+    host_fatal(msg);
+    exit(1);
+}
+
+// ---- dispatcher -----------------------------------------------------------------
+void ps2_call(Ctx &c, u32 addr)
+{
+    int lo = 0, hi = g_functable_size - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        u32 a = g_functable[mid].addr;
+        if (a == addr) {
+            g_functable[mid].fn(c);
+            return;
+        }
+        if (a < addr) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    char msg[64];
+    snprintf(msg, sizeof msg, "indirect call to non-function %08x", addr);
+    die(msg, c, addr);
+}
+
+// ---- interrupts ---------------------------------------------------------------------
+// Only what the game needs so far: INTC handlers (VBlank) fired by a host timer.
+// They run at the next function entry with the whole CPU state saved around them.
+volatile u32 g_irq_pending;
+
+struct IrqHandler {
+    u32 fn, arg;
+};
+static std::vector<IrqHandler> g_intc[16], g_dmac[16];
+static u32 g_intc_enabled, g_dmac_enabled;
+static bool g_in_irq;
+
+// bit 31 of g_irq_pending stands for "some DMAC channel finished" (g_dmac_pending)
+static const u32 IRQ_DMAC = 1u << 31;
+
+// raised from the DMA, VBlank and EE threads alike
+// the game's thread asleep in ps2_idle: what wakes it
+static std::mutex g_idle_lock;
+static std::condition_variable g_idle_wake;
+static std::atomic<bool> g_idling;
+
+static void wake_idle()
+{
+    if (!g_idling.load()) return;
+    std::lock_guard<std::mutex> lock(g_idle_lock);
+    g_idle_wake.notify_one();
+}
+
+void raise_intc(int cause)
+{
+    __atomic_fetch_or(&g_irq_pending, 1u << cause, __ATOMIC_SEQ_CST);
+    wake_idle();
+}
+
+void ps2_idle(Ctx &c)
+{
+    if (!g_irq_pending) {
+        Phase timed(PH_WAIT_VSYNC);
+        std::unique_lock<std::mutex> lock(g_idle_lock);
+        g_idling = true;
+        // the time is only a guard: the loop looks at its variable again in any case
+        g_idle_wake.wait_for(lock, std::chrono::milliseconds(20), [] { return g_irq_pending != 0; });
+        g_idling = false;
+    }
+    if (g_irq_pending) ps2_take_interrupts(c);
+}
+
+bool g_eie = true;
+void op_ei(Ctx &c)
+{
+    g_eie = true;
+    if (g_irq_pending) ps2_take_interrupts(c);
+}
+
+static void run_handler(Ctx &c, u32 fn, u32 cause, u32 arg)
+{
+    Ctx saved = c;
+    bool eie = g_eie;                   // as the handler's own DI/EI leave it is not ours to keep
+    c.r[4].d[0] = cause;
+    c.r[5].d[0] = sx32(arg);
+    // on the kernel's stack, as on the PS2: the game's stack below sp keeps what the
+    // game left there (elSetupLightContext reads two light directions it does not
+    // always write; a handler's frames there lit cars black)
+    static const u32 irq_sp = getenv("HP2_IRQSTACK") ? (u32)strtoul(getenv("HP2_IRQSTACK"), nullptr, 16) : 1;   // TEMP: 1 = the game stack (sp - 0x400), else a kernel stack address, e.g. 80070000
+    if (irq_sp == 1) c.r[29].d[0] -= 0x400;
+    else c.r[29].d[0] = (u64)(s64)(s32)irq_sp;
+    ps2_call(c, fn);
+    c = saved;
+    g_eie = eie;
+}
+
+void ps2_take_interrupts(Ctx &c)
+{
+    if (g_in_irq || !g_eie) return;
+    g_in_irq = true;
+    u32 pending = __atomic_exchange_n(&g_irq_pending, 0u, __ATOMIC_SEQ_CST);
+    for (u32 cause = 0; cause < 16; cause++) {
+        if (!(pending & (1u << cause)) || !(g_intc_enabled & (1u << cause))) continue;
+        for (auto &h : g_intc[cause]) run_handler(c, h.fn, cause, h.arg);
+    }
+    if (pending & IRQ_DMAC) {
+        u32 chans = __atomic_exchange_n(&g_dmac_pending, 0u, __ATOMIC_SEQ_CST);
+        for (u32 ch = 0; ch < 16; ch++) {
+            if (!(chans & (1u << ch)) || !(g_dmac_enabled & (1u << ch))) continue;
+            for (auto &h : g_dmac[ch]) run_handler(c, h.fn, ch, h.arg);
+        }
+    }
+    g_in_irq = false;
+}
+
+// HP2_PEEK=<addr>[,<addr>...]: once a second, the guest words at those addresses;
+// an address is hex, or gp+N / gp-N (decimal) for small data
+static void peek()
+{
+    static const char *e = getenv("HP2_PEEK");
+    static int n;
+    if (!e || !g_ctx || ++n % 60) return;
+    fprintf(g_log, "peek:");
+    for (const char *p = e; p && *p; p = strchr(p, ',') ? strchr(p, ',') + 1 : nullptr) {
+        u32 a = !strncmp(p, "gp", 2) ? g_ctx->r[28].w[0] + (u32)atoi(p + 2) : (u32)strtoul(p, nullptr, 16);
+        u32 v;
+        memcpy(&v, g_ram + (a & 0x1FFFFFC), 4);
+        fprintf(g_log, " %08x=%d", a, (int)v);
+    }
+    fprintf(g_log, "\n");
+}
+
+static void start_vblank_timer()
+{
+    std::thread([] {
+        phase_thread("vblank");
+        cores_thread(CORE_SOUND);           // the field's clock: short and on time, as the sound is
+        auto next = std::chrono::steady_clock::now();
+        // HP2_VBLANKUS=<microseconds>: a shorter field for checking runs, a replay's steps are the same at any speed
+        static const int field = getenv("HP2_VBLANKUS") ? atoi(getenv("HP2_VBLANKUS")) : 16683;
+        for (;;) {
+            next += std::chrono::microseconds(field);       // NTSC field rate
+            std::this_thread::sleep_until(next);
+            peek();
+            gs_vblank();
+            __atomic_fetch_or(&g_irq_pending, (1u << INTC_VBLANK_START) | (1u << INTC_VBLANK_END), __ATOMIC_SEQ_CST);
+            wake_idle();
+        }
+    }).detach();
+}
+
+// ---- BIOS syscalls (HLE) ------------------------------------------------------------
+static u32 g_heap_end;
+static u32 g_stack_bottom = 0x01FFC000;
+static u32 g_user_syscalls[256];
+// kernel RAM (below 0x80000) is not used by the game itself
+static const u32 KERNEL_SYSCALL_TABLE = 0x80010000;
+
+void ps2_syscall(Ctx &c, u32 pc)
+{
+    s32 num = (s32)c.r[3].w[0];
+    u32 a0 = c.r[4].w[0], a1 = c.r[5].w[0], a2 = c.r[6].w[0];
+    u32 ret = 0;
+    // handlers the game installed itself with SetSyscall run as ordinary code
+    // (handlers copied into kernel RAM, e.g. by InitAlarm, were never recompiled:
+    // those syscalls fall through to the HLE below)
+    u32 user = g_user_syscalls[(num < 0 ? -num : num) & 0xFF];
+    if (user && user < 0x80000000) {
+        ps2_call(c, user);
+        return;
+    }
+    switch (num < 0 ? -num : num) {
+    case 0x74:                      // SetSyscall(number, handler)
+        // libkernel's _setup locates the BIOS syscall table by searching kernel
+        // memory for these handler addresses, so keep a table where it looks
+        g_user_syscalls[a0 & 0xFF] = a1;
+        SW(KERNEL_SYSCALL_TABLE + (a0 & 0xFF) * 4, a1);
+        break;
+    case 0x3C: {                    // SetupThread(gp, stack, stack_size, args, root)
+        u32 top = a1 == 0xFFFFFFFF ? 0x02000000 : a1 + a2;
+        g_stack_bottom = top - a2;
+        ret = top - 0x10;
+        break;
+    }
+    case 0x3D:                      // SetupHeap(start, size): -1 runs up to the main stack
+        g_heap_end = a1 == 0xFFFFFFFF ? g_stack_bottom : a0 + a1;
+        ret = a0;
+        break;
+    case 0x64:                      // FlushCache
+    case 0x68:
+        break;
+    case 0x3E:                      // EndOfHeap
+        ret = g_heap_end;
+        break;
+    case 0x2F:                      // GetThreadId
+        ret = 1;
+        break;
+    case 0x7C:                      // Deci2Call: no debugger attached on a retail unit
+        ret = (u32)-1;
+        break;
+    case 0x7A:                      // SifGetReg
+        // SMFLAG: IOP booted, SIF commands up, boot finished (the sceSif* HLE
+        // in hle_iop.cpp covers the library; this is the raw syscall)
+        ret = a0 == 4 ? 0x70000 : 0;
+        break;
+    case 0x79:                      // SifSetReg
+        break;
+    case 0x10:                      // AddIntcHandler(cause, handler, next, arg)
+        g_intc[a0 & 15].push_back({a1, c.r[7].w[0]});
+        ret = (u32)g_intc[a0 & 15].size();
+        break;
+    case 0x12:                      // AddDmacHandler(channel, handler, next, arg)
+        g_dmac[a0 & 15].push_back({a1, c.r[7].w[0]});
+        ret = (u32)g_dmac[a0 & 15].size();
+        break;
+    case 0x14: case 0x1A:           // (i)EnableIntc
+        g_intc_enabled |= 1u << (a0 & 15);
+        ret = 1;
+        break;
+    case 0x15: case 0x1B:           // (i)DisableIntc
+        g_intc_enabled &= ~(1u << (a0 & 15));
+        ret = 1;
+        break;
+    case 0x16: case 0x1C:           // (i)EnableDmac
+        g_dmac_enabled |= 1u << (a0 & 15);
+        ret = 1;
+        break;
+    case 0x17: case 0x1D:           // (i)DisableDmac
+        g_dmac_enabled &= ~(1u << (a0 & 15));
+        ret = 1;
+        break;
+    default: {
+        static int seen[256];
+        if (seen[(num < 0 ? -num : num) & 0xFF]++ < 4)
+            fprintf(g_log, "syscall %d (0x%x) a0=%08x a1=%08x a2=%08x at %08x\n",
+                    num, num < 0 ? -num : num, a0, a1, a2, pc);
+        break;
+    }
+    }
+    c.r[2].d[0] = sx32(ret);
+}
+
+void ps2_break(Ctx &c, u32 pc) { die("break", c, pc); }
+
+// The game's own assert (bAssertFail, 0x250ac0: the expression, the file, the line; it prints them nowhere on a retail disc and then
+// breaks, which stops the game here as it would hang a PS2). The log gets what it said, so a tester's log names the check that failed.
+void HOOK_bAssertFail__FPCcT0i(Ctx &c, void (*orig)(Ctx &))
+{
+    const u32 expr = c.r[4].w[0], file = c.r[5].w[0];
+    auto text = [](u32 a) {
+        static char buf[2][96];
+        static int turn;
+        char *out = buf[turn ^= 1];
+        const char *in = a >= 0x100000 && a < 0x2000000 ? (const char *)host(a) : "?";
+        size_t n = 0;
+        for (; n < 95 && in[n] >= 32 && in[n] < 127; n++) out[n] = in[n];
+        out[n] = 0;
+        return out;
+    };
+    fprintf(stderr, "the game's assert failed: \"%s\", %s line %d (called from %08x)\n", text(expr), text(file), (int)c.r[6].w[0], c.r[31].w[0]);
+    fflush(stderr);
+    orig(c);
+}
+
+// The sound's 48 voices: a sample that keeps its voices (an engine, a siren, a stream) takes a run of them in the table at 0x322490
+// (bSnd_LockChannels, 0x2638a0; 0xfffc: no run that long is free) and gives them back (bSnd_UnlockChannels). A tester's log of 0.13
+// (two players, You're the Cop, Island Outskirts) ends in the assert on that 0xfffc as the race starts: the log now says who asked.
+static void voices_line(const char *what, u32 n, u32 at, u32 ra)
+{
+    static const bool all = getenv("HP2_VOICELOG") != nullptr;     // every keep and free, not only the ones that found no room
+    const bool failed = at == 0xfffc;
+    if (!failed && !all) return;
+    static int told;
+    if (failed && !all && told++ >= 40) return;     // the menus' sounds may ask in vain many times over: the first forty say enough
+    char table[49];
+    int kept = 0;
+    for (int i = 0; i < 48; i++) table[i] = host(0x322490)[i] ? (kept++, '#') : '.';
+    table[48] = 0;
+    fprintf(stderr, "sound voices: %s %u at %u (from %08x): %d of 48 kept [%s]%s\n", what, n, at, ra, kept, table, failed ? " NO ROOM" : "");
+}
+void HOOK_bSnd_LockChannels__FUs(Ctx &c, void (*orig)(Ctx &))
+{
+    const u32 n = c.r[4].w[0] & 0xffff, ra = c.r[31].w[0];
+    // TEMP HP2_VOICETEST=1: the eighth such question finds every voice kept, and three tries later they are as they were
+    static const bool test = getenv("HP2_VOICETEST") != nullptr;
+    static int asked;
+    u8 kept_were[48];
+    const bool faked = test && ra >= 0x273388 && ra < 0x273468 && ++asked == 8;
+    if (faked) memcpy(kept_were, host(0x322490), 48), memset(host(0x322490), 1, 48);
+    orig(c);
+    // No run of free voices, asked by bSample::LockVoice (0x2733c0), which asserts on that and stops the game. A voice counts as
+    // free when it is not kept and the sound driver's status says it has ended (SOUND_FindFreeSPUChannels reads the table that
+    // SOUND_CopyIOPBuffer fills once a frame, in bSnd_DriverUpdate). A race starts here seconds sooner than a PS2 loaded it, with
+    // the menu's sounds still dying away, and the engines, the sirens and the streams all ask at once. So the voices are given
+    // time: a few milliseconds, the driver's update, and the question again, for up to half a second. Still none: as the game has it.
+    if ((c.r[2].w[0] & 0xffff) == 0xfffc && ra >= 0x273388 && ra < 0x273468) {
+        voices_line("keep", n, 0xfffc, ra);
+        int waited = 0;
+        for (; waited < 125 && (c.r[2].w[0] & 0xffff) == 0xfffc; waited++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
+            if (faked && waited == 3) memcpy(host(0x322490), kept_were, 48);
+            Ctx saved = c;
+            c.r[29].d[0] -= 0x200;
+            ps2_call(c, 0x25f418);          // bSnd_DriverUpdate
+            c = saved;
+            c.r[4].d[0] = n;
+            orig(c);
+        }
+        fprintf(stderr, "sound voices: waited %d ms for voices that were ending: %s\n", waited * 4, (c.r[2].w[0] & 0xffff) == 0xfffc ? "none came free" : "room now");
+    }
+    voices_line("keep", n, c.r[2].w[0] & 0xffff, ra);
+}
+void HOOK_bSnd_UnlockChannels__FUsUs(Ctx &c, void (*orig)(Ctx &))
+{
+    const u32 at = c.r[4].w[0] & 0xffff, n = c.r[5].w[0] & 0xffff, ra = c.r[31].w[0];
+    orig(c);
+    voices_line("free", n, at, ra);
+}
+
+void ps2_unimpl(Ctx &c, u32 pc, u32 word)
+{
+    char msg[64];
+    snprintf(msg, sizeof msg, "unimplemented instruction %08x", word);
+    die(msg, c, pc);
+}
+
+// ---- COP0 -----------------------------------------------------------------------------
+static auto g_t0 = std::chrono::steady_clock::now();
+
+u32 op_mfc0(Ctx &, int rd)
+{
+    if (rd == 9) {                  // Count: 294.912 MHz
+        auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now() - g_t0).count();
+        return (u32)(ns * 294912 / 1000000);
+    }
+    if (rd == 12) return g_eie ? 0x10000 : 0;   // Status: EIE
+    if (rd == 15) return 0x2E20;    // PRId: EE
+    return 0;
+}
+void op_mtc0(Ctx &, int, u32) {}
+
+// ---- VU0 control registers ---------------------------------------------------------
+static u32 g_cmsar0;
+
+u32 op_cfc2(Ctx &c, int rd)
+{
+    if (rd < 16) return c.vi[rd];
+    switch (rd) {
+    case 16: return c.vstatus;
+    case 17: return c.vmac;
+    case 18: return c.vclip;
+    case 21: { FPR f; f.f = c.vi_i; return f.u; }
+    case 22: { FPR f; f.f = c.vq; return f.u; }
+    case 27: return g_cmsar0;
+    case 29: return 0;              // VPU-STAT: VU0/VU1 idle
+    }
+    return 0;
+}
+void op_ctc2(Ctx &c, int rd, u32 v)
+{
+    if (rd > 0 && rd < 16) { c.vi[rd] = (u16)v; return; }
+    switch (rd) {
+    case 16: c.vstatus = v; break;
+    case 18: c.vclip = v; break;
+    case 21: { FPR f; f.u = v; c.vi_i = f.f; break; }
+    case 22: { FPR f; f.u = v; c.vq = f.f; break; }
+    case 27: g_cmsar0 = v; break;
+    }
+}
+
+void vu0_callms(Ctx &c, u32 addr)
+{
+    static int n;
+    if (n++ < 4)
+        fprintf(g_log, "VU0 microprogram call at %04x ignored (ra=%08x)\n", addr, c.r[31].w[0]);
+}
+
+// ---- hardware registers ------------------------------------------------------------
+static void io_note(const char *kind, u32 addr, u64 v)
+{
+    int &n = g_io_seen[addr];
+    if (n++ < 2)
+        fprintf(g_log, "%s %08x = %llx  (ra=%08x)\n", kind, addr, (unsigned long long)v,
+                g_ctx ? g_ctx->r[31].w[0] : 0);
+}
+
+u64 io_read(u32 addr, int size)
+{
+    (void)size;
+    u64 v;
+    if (dma_io_read(addr, v) || vif_io_read(addr, v) || gs_io_read(addr, v)) return v;
+    io_note("io read ", addr, 0);
+    return 0;
+}
+void io_write(u32 addr, u64 value, int size)
+{
+    (void)size;
+    if (dma_io_write(addr, value)) return;
+    if (vif_io_write(addr, value) || gs_io_write(addr, value)) return;
+    io_note("io write", addr, value);
+}
+u128 io_read128(u32 addr)
+{
+    io_note("io read128 ", addr, 0);
+    return 0;
+}
+void io_write128(u32 addr, u128 value)
+{
+    if (addr == 0x10005000) { vif1_scan((const u32 *)&value, 4); return; }   // VIF1 FIFO
+    if (addr == 0x10006000) return;                                          // GIF FIFO
+    io_note("io write128", addr, (u64)value);
+}
+
+// ---- ELF loading ------------------------------------------------------------------------
+// The game's program from the player's disc, data\SLUS_203.62 (the first start copies it there), checked by its SHA-1: the code is recompiled,
+// its data sections and the VU microcode it carries go into guest memory
+static std::vector<u8> g_elf;
+
+static bool load_elf(u32 &entry)
+{
+    const char *env = getenv("HP2_DATA");
+    const std::string path = (env ? std::string(env) + "/" : host_exe_dir()) + "data/SLUS_203.62";
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    g_elf.resize((size_t)ftell(f));
+    fseek(f, 0, SEEK_SET);
+    const bool read = fread(g_elf.data(), 1, g_elf.size(), f) == g_elf.size();
+    fclose(f);
+    bool known = false;
+    const std::string sha = sha1_hex(g_elf.data(), g_elf.size());
+    for (const KnownDisc &k : kKnownDiscs) known |= sha == k.elf_sha1;
+    if (!read || !known || g_elf.size() < 0x34) return false;
+    const u8 *d = g_elf.data();
+    entry = *(u32 *)&d[0x18];
+    u32 phoff = *(u32 *)&d[0x1C];
+    u16 phnum = *(u16 *)&d[0x2C];
+    for (int i = 0; i < phnum; i++) {
+        const u32 *ph = (const u32 *)&d[phoff + i * 32];
+        if (ph[0] != 1) continue;           // PT_LOAD
+        u32 off = ph[1], vaddr = ph[2], filesz = ph[4], memsz = ph[5];
+        memcpy(g_ram + (vaddr & 0x01FFFFFF), &d[off], filesz);
+        memset(g_ram + (vaddr & 0x01FFFFFF) + filesz, 0, memsz - filesz);
+    }
+    return true;
+}
+
+void F_00100008(Ctx &c);
+
+// The EE's FPU and VU0 round toward zero and take a denormal for zero. The game's code counts on it: DriveTarget::Resample steps along a path while
+// the sum is within its length, which rounding to nearest can pass by a bit before the last point. That point is then whatever was on the stack, a racer's
+// belt goes through it, the car is thrown a billion metres, and the way back over the finish line counts as a lap.
+static void ee_float_mode()
+{
+    if (getenv("HP2_NOEEFLOAT")) return;        // the host's rounding, for comparing
+#if defined(__x86_64__)
+    __builtin_ia32_ldmxcsr(__builtin_ia32_stmxcsr() | 0x6000 | 0x8000 | 0x40);      // RC toward zero, flush to zero, denormals are zero
+#elif defined(__aarch64__)
+    unsigned long fpcr;
+    asm volatile("mrs %0, fpcr" : "=r"(fpcr));
+    fpcr |= 3ul << 22 | 1ul << 24;                                                  // RMode toward zero, FZ
+    asm volatile("msr fpcr, %0" : : "r"(fpcr));
+#endif
+}
+
+void ee_float_mode_here() { ee_float_mode(); }
+
+#ifdef EE_CHECK
+int g_ee_chk = getenv("HP2_EECHK") ? atoi(getenv("HP2_EECHK")) : 7;
+// TEMP (-DEE_CHECK, eefloat.h): what the fast arithmetic gives other than the model, by kind and by what kind of difference
+void ee_check_report(int kind, uint32_t a, uint32_t b, uint32_t fast, uint32_t model)
+{
+    static const char *const kKind[6] = {"add", "mul", "div", "sqrt", "add4", "mul4"};
+    static std::atomic<unsigned> zero_sign[6], overflow[6], other[6];
+    const bool zs = !((fast | model) & 0x7fffffffu);
+    const bool ov = (a & 0x7f800000u) == 0x7f800000u || (b & 0x7f800000u) == 0x7f800000u || (model & 0x7f800000u) == 0x7f800000u;
+    std::atomic<unsigned> &n = ov ? overflow[kind] : zs ? zero_sign[kind] : other[kind];
+    const unsigned seen = n++;
+    if (seen < 6 || (seen & (seen + 1)) == 0)
+        fprintf(stderr, "eecheck: %s %08x %08x: fast %08x, model %08x (%s, %u of its kind)\n", kKind[kind], a, b, fast, model,
+                ov ? "past the host's range" : zs ? "the sign of zero" : "a value", seen + 1);
+}
+#endif
+
+void hot_math_selftest();
+
+// HP2_HOST_MAIN: the host owns the process's main thread (macOS: the window and its events must be there) and runs the game on
+// a thread of its own through hp2_game_main (mac/host_sdl.cpp)
+#ifdef HP2_HOST_MAIN
+int hp2_game_main()
+#else
+int main()
+#endif
+{
+    mem_reserve();
+    // the first start, or the game installed beside this exe: the game runs from its own folder
+    if (setup_start() != SETUP_PLAY) return 0;
+    host_log_start(pc_config_log());
+    if (!disc_open()) {
+        host_fatal("The game's data was not found: the data folder (with data\\IRX253\\STREAM.IRX) must be next to the game.");
+        return 1;
+    }
+    // slack past the end: 64-bit and 128-bit accesses at the last address stay in bounds
+    u32 entry;
+    if (!load_elf(entry)) {
+        host_fatal("The game's program, data\\SLUS_203.62, is missing or is not one the port knows. Install the game again from the disc image.");
+        return 1;
+    }
+    // The gamepad's layouts: Silent's "Trigger control mappings" (layouts_patch.h), words of the program's tables of controller setups.
+    // With it the DualShock 2 has eight setups, four with the throttle and the brake on the triggers. HP2_NOLAYOUTS: the game's four.
+    if (!getenv("HP2_NOLAYOUTS"))
+        for (const auto &w : kLayoutsPatch) SW(w[0], w[1]);
+    fprintf(g_log, "entry %08x\n", entry);
+    profile_start();
+    stall_watch_start();
+    cores_init();
+    cores_thread(CORE_GAME);
+    start_vblank_timer();
+    pc_config_init();
+    if (!getenv("HP2_NOWINDOW")) {
+        const int was = window_dpi_aware();
+        fprintf(g_log, "window: the process's DPI awareness was %d, now per monitor\n", was);
+        window_start();
+    }
+    static Ctx c;
+    g_ctx = &c;
+    c.r[29].d[0] = 0x01FFFF00;
+    c.vf[0].f[3] = 1.0f;
+    ee_float_mode();
+    ee_float_init();
+    hot_math_selftest();                    // HP2_AABBTEST
+    std::thread([] {
+        ee_float_mode();
+        const auto t0 = std::chrono::steady_clock::now();
+        ee_tables_build();
+        fprintf(g_log, "eefloat: the one-mantissa tables are ready, %.2f s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+    }).detach();
+    F_00100008(c);
+    fprintf(g_log, "_start returned\n");
+    return 0;
+}
